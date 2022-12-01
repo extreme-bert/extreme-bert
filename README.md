@@ -148,13 +148,16 @@ python run_glue.py \
 ```
 
 ## Citation
-If you find this repository useful, you may cite it as:  
+If you find this repository useful, you may cite [our paper](https://arxiv.org/abs/2211.17201) as:  
 ```
-@inproceedings{fast-bert-pretraining,
-    title = "Fast BERT Pretraining",
-    author = "Rui Pan, Shizhe Diao, Jianlin Chen, Tong Zhang",
-    month = dec,
-    year = "2022",
+@inproceedings{extreme-bert,
+    title={ExtremeBERT: A Toolkit for Accelerating Pretraining of Customized BERT}, 
+    author={Rui Pan and Shizhe Diao and Jianlin Chen and Tong Zhang},
+    year={2022},
+    eprint={2211.17201},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2211.17201},
 }
 ```
 
