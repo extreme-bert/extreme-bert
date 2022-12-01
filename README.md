@@ -1,6 +1,6 @@
 # ExtremeBERT: Accelerate your LM Pre-training!
 
-This repository contains scripts for pre-training and finetuning language models with limited computational budget.
+This repository contains scripts for pre-training and finetuning language models with limited computational budget. Take a quick look at our [documentation](https://extreme-bert.github.io/extreme-bert-page).
 
 <p align="center">
 <img src="assets/logov3.png" alt="Fast BERT Pre-training" width="200"/>
@@ -11,7 +11,10 @@ This repository contains scripts for pre-training and finetuning language models
         <img alt="GitHub" src="https://img.shields.io/badge/license-Apache--2.0-brightgreen">
     </a>
     <a href="https://extreme-bert.github.io/extreme-bert-page">
-        <img alt="Documentation" src="https://img.shields.io/badge/website-online-yellowgreen">
+        <img alt="Documentation" src="https://img.shields.io/badge/website-online-orange">
+    </a>
+    <a href="https://github.com/extreme-bert/extreme-bert/blob/main/CODE_OF_CONDUCT.md">
+        <img alt="Contributor Covenant" src="https://img.shields.io/badge/Contributor%20Covenant-v2.1%20adopted-green.svg">
     </a>
 </p>
 
