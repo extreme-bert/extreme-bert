@@ -69,8 +69,6 @@ Pretraining script: `run_pretraining.py`
 
 For all possible pretraining arguments see: `python run_pretraining.py -h`
 
-We highly suggest reviewing the various [training features](#time-based-training) we provide within the library.
-
 ##### Example for training with the best configuration presented in our paper (24-layers/1024H/time-based learning rate schedule/fp16):
 
 ```bash
