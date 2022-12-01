@@ -66,6 +66,7 @@ function main() {
 
   # ===== Standard finetune setting
   local pretrain_dataset_name=$1
+  local prefix=$2
 
   local model_set_path="saved_models/pretrain/${pretrain_dataset_name}"
 
@@ -75,7 +76,7 @@ function main() {
   local shared_output_dir="output_test_translated/finetune/${pretrain_dataset_name}"
 
   # Translates all test files to the given format and zip them
-  for model_path in ${model_set_path}/*; do
+  for model_path in ${model_set_path}/${prefix}; do
     local model_name=$(basename ${model_path})
 
     local output_dir=${shared_output_dir}/${model_name}
@@ -86,6 +87,7 @@ function main() {
 
     # Gets best validation result, based on that to select prediction file
     for task in wnli rte mrpc stsb cola sst2 qnli qqp mnli; do
+    # for task in wnli; do
     # for task in wnli rte mrpc stsb cola sst2 qnli; do
       # Chooses the file which corresponds to the best validation result
       #
@@ -100,7 +102,7 @@ function main() {
       local prefix_for_best_val=$(cat ${log_dir}/best-val.log \
           | tail -1 \
           | awk '{ print $NF }' \
-          | sed 's/\.err$//')
+          | sed 's/\.log-err$//')
 
       # Translates the .txt prediction of huggingface to .tsv for GLUE server
       local input_prefix="${input_dir}/${task}/${model_name}/${prefix_for_best_val}"

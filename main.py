@@ -312,8 +312,8 @@ def prepare_dataset(config, args=None):
         f'  2> {log_dir}/generate_sample.err',
     ]
 
-    logging('See {log_dir}/generate_sample.[log|err] for detailed'
-            ' stdout/stderr')
+    logging(f'See {log_dir}/generate_sample.[log|err] for detailed'
+             ' stdout/stderr')
     run_bash(''.join(generate_sample_command))
     logging('===== sample generation end')
 
@@ -424,9 +424,10 @@ def collect_test_result(config):
 
     logging('########## collect test result start...')
     dataset_name = config.DATASET.ID
-    run_bash(f'./summarize_val.sh {dataset_name}')
-    run_bash(f'./collect_best_val.sh {dataset_name}')
-    run_bash(f'./translate_test_result.sh {dataset_name}')
+    pretrain_id = config.PRETRAIN.ID
+    run_bash(f'./summarize_val.sh {dataset_name} {pretrain_id}')
+    run_bash(f'./collect_best_val.sh {dataset_name} {pretrain_id}')
+    run_bash(f'./translate_test_result.sh {dataset_name} {pretrain_id}')
     logging('########## collect test result end...')
 
 
