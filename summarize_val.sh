@@ -46,7 +46,11 @@ function collect_validation_result() {
     echo "eval_accuracy eval_loss finetune_file" > ${result_file}
   fi
 
-  for file_path in ${log_dir}/*.err; do
+  for file_err_path in ${log_dir}/*.err; do
+    local file_prefix=$(echo ${file_err_path} | sed 's/\.err//g')
+    cat ${file_prefix}.log ${file_prefix}.err > ${file_prefix}.log-err
+    local file_path=${file_prefix}.log-err
+
     # Collects relevant statisitcs (can be missed if not available)
     local eval_loss=$(cat ${file_path} | grep -F "***** eval metrics *****" -A 11 | grep "eval_loss  " | awk '{ print $NF }' | sed -e "s/\r//")
     local eval_f1=$(cat ${file_path} | grep -F "***** eval metrics *****" -A 11 | grep "eval_f1  " | awk '{ print $NF }' | sed -e "s/\r//")
@@ -82,12 +86,13 @@ function main() {
 
   # ===== Standard finetune setting
   local pretrain_dataset_name=$1
+  local prefix=$2
 
   local model_set_path="saved_models/pretrain/${pretrain_dataset_name}"
 
-  for model_path in ${model_set_path}/*; do
+  for model_path in ${model_set_path}/${prefix}; do
     for task_name in wnli rte mrpc stsb cola sst2 qnli qqp mnli;do
-    # for task_name in mrpc;do
+    # for task_name in wnli;do
       local model_name=$(basename ${model_path})
       local log_dir="log/finetune/${pretrain_dataset_name}/${task_name}/${model_name}"
       local result_file="${log_dir}/summary.log"

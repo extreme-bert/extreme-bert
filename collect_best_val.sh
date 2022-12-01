@@ -21,16 +21,17 @@ function main() {
 
   # ===== Standard finetune setting
   local pretrain_dataset_name=$1
+  local prefix=$2
 
   local model_set_path="saved_models/pretrain/${pretrain_dataset_name}"
 
   local epoch_pattern="epoch-.*"
 
   for task_name in wnli rte mrpc stsb cola sst2 qnli qqp mnli; do
-  # for task_name in mrpc; do
+  # for task_name in wnli; do
 
     # Collects best validation results
-    for model_path in ${model_set_path}/*; do
+    for model_path in ${model_set_path}/${prefix}; do
       local model_name=$(basename ${model_path})
       local input_file="log/finetune/${pretrain_dataset_name}/${task_name}/${model_name}/summary.log"
       local output_file="log/finetune/${pretrain_dataset_name}/${task_name}/${model_name}/best-val.log"
@@ -47,7 +48,7 @@ function main() {
 
     # Displays heading + metrics meanings
     echo "===== ${task_name}"
-    for model_path in ${model_set_path}/*; do
+    for model_path in ${model_set_path}/${prefix}; do
       local model_name=$(basename ${model_path})
       local output_file="log/finetune/${pretrain_dataset_name}/${task_name}/${model_name}/best-val.log"
       cat ${output_file} | head -1
@@ -55,7 +56,7 @@ function main() {
     done
 
     # Displays best validation results
-    for model_path in ${model_set_path}/*; do
+    for model_path in ${model_set_path}/${prefix}; do
       local model_name=$(basename ${model_path})
       local output_file="log/finetune/${pretrain_dataset_name}/${task_name}/${model_name}/best-val.log"
       echo "$(cat ${output_file} | head -2 | tail -1) ${model_name}"

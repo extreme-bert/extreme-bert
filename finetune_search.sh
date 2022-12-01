@@ -145,6 +145,7 @@ function main() {
   #   qqp:    363846
   #   mnli:   392702
   for task_name in mnli qqp qnli sst2 cola stsb mrpc rte wnli; do
+  # for task_name in wnli; do
     run_hyperparam_search \
       ${pretrain_dataset_name} \
       ${task_name} \
