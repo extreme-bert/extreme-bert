@@ -48,9 +48,9 @@ Efficient optimization and data processing algorithms will also be added to futu
 * At least 200GB disk space.
 
 ## Configurable pipeline
-  First, one may refer to `configs/24h-bert-simple.yaml` and make suitable configs for the pipeline, including datasets, number of gpus available, etc. Then, by simply running the following command, the whole pipeline will be executed stage by stage,
+  First, one may refer to `configs/bert-simple.yaml` and make suitable configs for the pipeline, including datasets, number of gpus available, etc. Then, by simply running the following command, the whole pipeline will be executed stage by stage,
   ```bash
-  source install.sh; python main.py --config configs/24h-bert-simple.yaml
+  source install.sh; python main.py --config configs/bert-simple.yaml
   ```
   which will run environment installation, dataset prepration, pretraining, finetuning and test result collection one by one and generate the .zip file for [GLUE test server submission](https://gluebenchmark.com/submit) under `output_test_translated/finetune/*/*.zip`.
    Please refer to [PIPELINE_CONFIG.md](docs/PIPELINE_CONFIG.md) for more information about the YAML config file.
