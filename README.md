@@ -3,7 +3,7 @@
 This repository contains scripts for pre-training and finetuning language models with limited computational budget. Take a quick look at our [documentation](https://extreme-bert.github.io/extreme-bert-page).
 
 <p align="center">
-<img src="assets/logov3.png" alt="Fast BERT Pre-training" width="200"/>
+<img src="assets/logo.png" alt="Fast BERT Pre-training" width="200"/>
 </p>
 
 <p align="center">
