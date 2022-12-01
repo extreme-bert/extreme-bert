@@ -1,0 +1,14 @@
+SYSTEM:
+  NUM_GPUS: 4
+  MAX_MEMORY_IN_GB: 64
+
+DATASET:
+  HUGGINGFACE_DATASETS:
+    - [wikipedia, 20220301.en]
+    - [bookcorpusopen, plain_text]
+
+PRETRAIN:
+  NUM_STEPS: 23000
+
+TOKENIZER:
+  NAME_OR_PATH: bert-large-uncased

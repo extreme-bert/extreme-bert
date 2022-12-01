@@ -1,0 +1,18 @@
+SYSTEM:
+  NUM_GPUS: 4
+
+DATASET:
+  HUGGINGFACE_DATASETS:
+    - [wikipedia, 20220301.simple]
+    - [wikipedia, 20220301.frr]
+
+PRETRAIN:
+  NUM_STEPS: 100
+
+FINETUNE:
+  MULTIPROCESS_GPU_LIST:
+    - [0, 1]
+    - [2, 3]
+
+TOKENIZER:
+  NAME_OR_PATH: bert-large-uncased

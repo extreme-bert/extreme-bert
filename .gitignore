@@ -1,0 +1,38 @@
+# ===== General files
+*.pyc
+
+# Virtual env
+24h-bert/*
+*/24h-bert/*
+
+# Vim temporary files
+*.swp
+*.swo
+
+# NFS temporary files
+.nfs*
+
+# ===== Project related files
+
+# Outputed logs
+log/*
+
+# Data directories
+data_*/
+
+# Project temporary files
+tmp/*
+output/*
+output_test/*
+output_test_translated/*
+
+# Pretrained models output files
+saved_models/*
+
+# Runing event files
+runs/*
+wandb/*
+
+# Data files
+data/*
+data
