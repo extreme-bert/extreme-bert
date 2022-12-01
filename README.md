@@ -29,9 +29,6 @@ Mixed precision is supported by adding `--fp16`.
 
 ![glue-performance](assets/glue-performance.png)
 
-### Model Zoo
-Support a large set of language model backbones, such as BERT, RoBERTa, T5. Users can easily use them via [huggingface model hub](https://huggingface.co/models).
-
 ### Dataset Zoo 
 Support a large number of pre-training datasets. Users can easily use them via
 [huggingface dataset hub](https://huggingface.co/datasets).
