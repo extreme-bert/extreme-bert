@@ -39,6 +39,14 @@ In addition, we also support users' custom dataset.
 It is hard to verify the effectiveness of a new optimization method in LM pre-training. With our package, we support integration of customized optimizers and schedulers into the pipeline, which help researchers in the optimization community to easily verify their algorithms. 
 Efficient optimization and data processing algorithms will also be added to future releases.
 
+
+### Supported Models
+
+| Model   |   Status |
+|----------|:-------------:|
+| [BERT](https://arxiv.org/abs/1810.04805) |  :white_check_mark: Supported |
+| [RoBERTa](https://arxiv.org/abs/1907.11692), [ALBERT](https://arxiv.org/abs/1909.11942), [DeBERTa](https://arxiv.org/abs/2006.03654) |  :construction: Developing |
+
 ## System requirements
 * Linux Ubuntu >= 18.04.
 * At least 20 GB GPU memory, e.g. GPU 3090 x1, or 2080Ti GPU x2, GeForce RTX 3070 x4, etc.
