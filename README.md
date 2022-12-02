@@ -1,6 +1,6 @@
 # ExtremeBERT: Accelerate your LM Pre-training!
 
-ExtremeBERT is a toolkit that accelerates the pretraining and finetuning of customized BERT on customized datasets.
+ExtremeBERT is a toolkit that accelerates the pretraining and finetuning of BERT on customized datasets.
 Take a quick look at our [documentation](https://extreme-bert.github.io/extreme-bert-page) and [paper](https://arxiv.org/abs/2211.17201).
 
 <p align="center">
