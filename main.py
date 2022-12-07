@@ -288,7 +288,7 @@ def prepare_dataset(config, args=None):
         f'  2> {log_dir}/shard_data.err'
     ])
 
-    logging('See {log_dir}/shard_data.[log|err] for detailed stdout/stderr')
+    logging(f'See {log_dir}/shard_data.[log|err] for detailed stdout/stderr')
     run_bash(''.join(shard_data_command))
     logging('===== data sharding end...')
 
