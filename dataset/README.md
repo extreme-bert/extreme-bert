@@ -189,9 +189,9 @@ python merge_shards.py \
 
 Use `generate_samples.py` for generating samples compatible with dataloaders used in the training script.
 
-To extract n-grams for datasets, please run pmi_ngram.py with the following parameters:
---dataset: the path of training data file
---output_dir: the path of output directory
+To extract n-grams for datasets, please run 'pmi_ngram.py' with the following parameters:
+'--dataset': the path of training data file
+'--output_dir': the path of output directory
 We provide two ngram.txt here
 
 IMPORTANT NOTE: the duplication factor chosen will multiply the number of final shards by its factor. For example, 10 shards with duplication factor 5 will generate 50 shards (each shard with different randomly generated (masked) samples).
