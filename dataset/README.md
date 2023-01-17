@@ -201,11 +201,13 @@ python generate_samples.py \
     -o <output_path> \
     --dup_factor 10 \
     --seed 42 \
-    --vocab_file <path_to_vocabulary_file> \
+    --tokenizer_name bert-large-uncased \
     --do_lower_case 1 \
     --masked_lm_prob 0.15 \ 
     --max_seq_length 128 \
     --model_name bert-large-uncased \
     --max_predictions_per_seq 20 \
-    --n_processes 16
+    --n_processes 16 \
+    --Ngram_path <path_to_Ngram> \
+    --Ngram_flag 1
 ```
