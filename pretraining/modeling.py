@@ -961,7 +961,7 @@ class BertForPreTraining(BertPreTrainedModel):
         super(BertForPreTraining, self).__init__(config)
         self.bert = BertModel(config, args)
         self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
-        self.apply(self.init_bert_weights)
+        self._init_weights(self.bert)
 
     def forward(self, batch):
         input_ids = batch[1]
@@ -1056,7 +1056,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         self.bert = BertModel(config, args)
         self.is_Ngram = args.is_Ngram
         self.cls = BertOnlyMLMHead(config, self.bert.embeddings.word_embeddings.weight)
-        self._init_weights()
+        self._init_weights(self.bert)
 
     def forward(self, batch, output_attentions=False):
         input_ids = batch[1]
@@ -1159,7 +1159,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         super(BertForNextSentencePrediction, self).__init__(config)
         self.bert = BertModel(config)
         self.cls = BertOnlyNSPHead(config)
-        self.apply(self.init_bert_weights)
+        self._init_weights(self.bert)
 
     def forward(
             self,
@@ -1237,7 +1237,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.classifier = nn.Linear(config.hidden_size, self.num_labels)
-        self.init_weights()
+        self._init_weights(self.bert)
 
     def forward(
             self,
