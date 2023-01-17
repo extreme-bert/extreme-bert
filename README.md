@@ -122,6 +122,8 @@ deepspeed run_pretraining.py \
   --early_stop_eval_loss 6 \
   --seed 42 \
   --fp16
+  --is_Ngram 1
+  --Ngram_path <ngram path>
 ```
 
 ## Finetuning
