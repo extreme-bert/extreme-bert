@@ -881,7 +881,7 @@ class BertModel(BertPreTrainedModel):
         encoder_output = self.encoder(
             hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
-            Ngarm_hidden_states=Ngram_embedding_output,
+            Ngram_hidden_states=Ngram_embedding_output,
             Ngram_position_matrix=Ngram_position_matrix,
             Ngram_attention_mask=extended_Ngram_attention_mask,
             output_all_encoded_layers=output_all_encoded_layers,
