@@ -21,7 +21,7 @@
 import logging
 import os
 import random
-from bert_dataset_provider import BertDatasetProviderInterface
+from pretraining.dataset.bert_dataset_provider import BertDatasetProviderInterface
 from concurrent.futures import ProcessPoolExecutor
 from enum import IntEnum
 
