@@ -21,7 +21,7 @@
 import logging
 import os
 import random
-from pretraining.dataset.bert_dataset_provider import BertDatasetProviderInterface
+from bert_dataset_provider import BertDatasetProviderInterface
 from concurrent.futures import ProcessPoolExecutor
 from enum import IntEnum
 
@@ -63,19 +63,20 @@ class WorkerInitObj(object):
 
 
 def create_pretraining_dataset(
-    input_file,
-    max_predictions_per_seq,
-    num_workers,
-    train_batch_size,
-    worker_init,
-    data_sampler,
-    no_nsp=False,
-    num_replicas=1,
-    rank=0,
-    epoch=0,
+        input_file,
+        max_predictions_per_seq,
+        num_workers,
+        train_batch_size,
+        worker_init,
+        data_sampler,
+        no_nsp=False,
+        is_Ngram=False,
+        num_replicas=1,
+        rank=0,
+        epoch=0,
 ):
     train_data = pretraining_dataset(
-        input_file=input_file, max_predictions_per_seq=max_predictions_per_seq, no_nsp=no_nsp
+        input_file=input_file, max_predictions_per_seq=max_predictions_per_seq, no_nsp=no_nsp, is_Ngram=is_Ngram
     )
     sampler_instance = data_sampler(
         train_data, num_replicas=num_replicas, rank=rank, drop_last=True
@@ -93,7 +94,7 @@ def create_pretraining_dataset(
 
 
 class pretraining_dataset(Dataset):
-    def __init__(self, input_file, max_predictions_per_seq, no_nsp=False):
+    def __init__(self, input_file, max_predictions_per_seq, no_nsp=False, is_Ngram=False):
         self.input_file = input_file
         self.max_predictions_per_seq = max_predictions_per_seq
         f = h5py.File(input_file, "r")
@@ -106,8 +107,14 @@ class pretraining_dataset(Dataset):
             "next_sentence_labels",
         ]
         self.no_nsp = no_nsp
+        self.is_Ngram = is_Ngram
         if no_nsp:
             keys.remove("next_sentence_labels")
+        if is_Ngram:  # guhao
+            keys.append("input_Ngram_ids")
+            keys.append("Ngram_attention_mask")
+            keys.append("Ngram_token_type_ids")
+            keys.append("Ngram_position_matrix")
         self.inputs = [np.asarray(f[key][:]) for key in keys]
         f.close()
 
@@ -129,13 +136,30 @@ class pretraining_dataset(Dataset):
         masked_lm_labels[masked_lm_positions[:index]] = masked_lm_ids[:index]
 
         if self.no_nsp:
-            return [
-                map_to_torch([BatchType.PRETRAIN_BATCH]),
-                input_ids,
-                input_mask,
-                segment_ids,
-                masked_lm_labels,
-            ]
+            if self.is_Ngram:
+                [input_Ngram_ids, Ngram_attention_mask, Ngram_token_type_ids, Ngram_position_matrix] = [
+                    torch.from_numpy(input[index].astype(np.int64))
+                    for _, input in enumerate(self.inputs[-4:])
+                ]
+                return [
+                    map_to_torch([BatchType.PRETRAIN_BATCH]),
+                    input_ids,
+                    input_mask,
+                    segment_ids,
+                    masked_lm_labels,
+                    input_Ngram_ids,
+                    Ngram_attention_mask,
+                    Ngram_token_type_ids,
+                    Ngram_position_matrix
+                ]
+            else:
+                return [
+                    map_to_torch([BatchType.PRETRAIN_BATCH]),
+                    input_ids,
+                    input_mask,
+                    segment_ids,
+                    masked_lm_labels,
+                ]
         else:
             next_sentence_labels = torch.from_numpy(
                 np.asarray(self.inputs[-1][index].astype(np.int64))
@@ -167,7 +191,7 @@ class ValidationDataset:
             if os.path.isfile(os.path.join(dataset_path, f)) and "test" in f
         ]
         assert (
-            len(self.dataset_files) > 0
+                len(self.dataset_files) > 0
         ), "No validation files found, make sure *valid_*.hdf5 file exist in dataset path"
         self.dataset_files.sort()
         self.num_files = len(self.dataset_files)
@@ -175,6 +199,7 @@ class ValidationDataset:
             logger.info(f"ValidationDataset - Initialization:  num_files = {self.num_files}")
         self.max_predictions_per_seq = args.max_predictions_per_seq
         self.no_nsp = args.no_nsp
+        self.is_Ngram = args.is_Ngram
 
     def get_validation_set(self, index):
         file_index = index % self.num_files
@@ -183,6 +208,7 @@ class ValidationDataset:
             input_file=input_file,
             max_predictions_per_seq=self.max_predictions_per_seq,
             no_nsp=self.no_nsp,
+            is_Ngram=self.is_Ngram
         )
         logger.info(f"ValidationDataset - shard {file_index} - length {len(validation_data)}")
         return validation_data
@@ -229,6 +255,7 @@ class PreTrainingDataset(BertDatasetProviderInterface):
         if self.global_rank == 0:
             self.logger.info(f"PreTrainingDataset - Initialization:  num_files = {self.num_files}")
         self.no_nsp = args.no_nsp
+        self.is_Ngram = args.is_Ngram
 
     def get_shard(self, epoch):
         if self.dataset_future is None:
@@ -241,6 +268,7 @@ class PreTrainingDataset(BertDatasetProviderInterface):
                 worker_init=self.worker_init,
                 data_sampler=self.data_sampler,
                 no_nsp=self.no_nsp,
+                is_Ngram=self.is_Ngram,
                 num_replicas=self.world_size,
                 rank=self.global_rank,
                 epoch=epoch,
@@ -264,6 +292,7 @@ class PreTrainingDataset(BertDatasetProviderInterface):
             self.worker_init,
             self.data_sampler,
             self.no_nsp,
+            self.is_Ngram,
             self.world_size,
             self.global_rank,
             epoch,
