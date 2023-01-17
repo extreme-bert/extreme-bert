@@ -183,6 +183,23 @@ class PretrainScriptParamsArguments:
         default=20,
         metadata={"help": "How many steps should the throughput (im Samples/s) be logged."},
     )
+        
+    # add by guhao
+    is_Ngram: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to use a Ngram_modle"}
+    )
+
+    num_hidden_Ngram_layers: Optional[int] = field(
+        default=1,
+        metadata={"help": "How many encoder layers for Ngram_module"}
+    )
+
+    Ngram_path: Optional[str] = field(
+        default=None,
+        metadata={"help": "Path to Ngram path"}
+    )
+    # add by guhao
 
     def __post_init__(self):
         self.no_nsp = not self.add_nsp
