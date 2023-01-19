@@ -760,7 +760,7 @@ def main():
 
     parser.add_argument(
         "--Ngram_flag",
-        default=True,
+        default=F,
         help="whether to create a dataset with Ngram"
     )
 
