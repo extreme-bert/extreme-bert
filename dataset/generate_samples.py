@@ -69,14 +69,13 @@ if __name__ == "__main__":
         default=20,
     )
     parser.add_argument("--Ngram_path",
-                        default='./ngram.txt',
+                        default=None,
                         type=str,
-                        required=True,
                         help="Path to Ngram path")
 
     parser.add_argument(
         "--Ngram_flag",
-        default=True,
+        default=False,
         help="whether to create a dataset with Ngram"
     )
     parser.add_argument("--n_processes", type=int, default=8, help="number of parallel processes")
