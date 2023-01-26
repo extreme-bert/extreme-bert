@@ -78,6 +78,10 @@ class BasePretrainModel(object):
         self.tokenizer = tokenizer
         self.config = config
         self.network = model_cls(self.config, self.args, **model_kwargs)
+        if self.args.fasttext_model_path is not None:
+            pretrained_embedding_np = np.load(args.fasttext_model_path)
+            pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
+            self.network.bert.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
 
     def forward(self, batch):
         outputs = self.network(batch)
