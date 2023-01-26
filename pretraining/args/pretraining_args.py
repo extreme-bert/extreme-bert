@@ -199,6 +199,11 @@ class PretrainScriptParamsArguments:
         default=None,
         metadata={"help": "Path to Ngram path"}
     )
+    
+    fasttext_model_path: Optional[str] = field(
+        default=None,
+        metadata={'help': "Path to fastext model init"}
+    )
     # add by guhao
 
     def __post_init__(self):
