@@ -223,3 +223,4 @@ To use fasttext to initilize the embedding for the Ngram, please Training word v
 ./fasttext skipgram -input data/fil9 -output result/fil9
 ```
 Then use the `ngram_emb.py` to extract the ngram embeddings from pre-trained models.
+
