@@ -219,5 +219,7 @@ if we add the Ngram module to the extreme-bert, To extract n-grams for datasets,
 We provide two ngram.txt here.
 
 To use fasttext to initilize the embedding for the Ngram, please Training word vectors using fasttext on the raw data following https://fasttext.cc/docs/en/unsupervised-tutorial.html
-```bath ./fasttext skipgram -input data/fil9 -output result/fil9```
+```bath 
+./fasttext skipgram -input data/fil9 -output result/fil9
+```
 Then use the `ngram_emb.py` to extract the ngram embeddings from pre-trained models.
