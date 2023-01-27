@@ -124,6 +124,7 @@ deepspeed run_pretraining.py \
   --fp16
   --is_Ngram 1
   --Ngram_path <ngram path>
+  --fasttext_model_path <fasttext_model_path>
 ```
 
 ## Finetuning
