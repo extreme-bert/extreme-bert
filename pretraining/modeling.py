@@ -1236,7 +1236,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.num_labels = config.num_labels
         self.bert = BertModel(config, args)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
+        self.is_Ngram = args.is_Ngram
         self.classifier = nn.Linear(config.hidden_size, self.num_labels)
         self._init_weights(self.bert)
 
@@ -1253,7 +1253,13 @@ class BertForSequenceClassification(BertPreTrainedModel):
             checkpoint_activations=False,
             **kwargs,
     ):
-
+        
+        if not self.is_Ngram:
+            input_Ngram_ids = None
+            Ngram_attention_mask = None
+            Ngram_token_type_ids = None
+            Ngram_position_matrix = None
+        
         outputs = self.bert(
             input_ids,
             token_type_ids,
