@@ -225,4 +225,4 @@ To use fasttext to initilize the embedding for the Ngram, please Training word v
 Then use the `ngram_emb.py` to extract the ngram embeddings from pre-trained models.
 
 ## Fine-tuning of Glue
-Following Gururangan et al. (2020), we conduct our experiments on eight classification tasks from four domains including biomedical sciences, computer scie nce, news and reviews. They are:
+Following [Gururangan et al. (2020)](https://github.com/allenai/dont-stop-pretraining), we conduct our experiments on eight classification tasks from four domains including biomedical sciences, computer scie nce, news and reviews. They are:
