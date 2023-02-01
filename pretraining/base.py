@@ -27,13 +27,14 @@ from transformers import BertTokenizer, RobertaTokenizer
 from pretraining.configs import PretrainedBertConfig, PretrainedRobertaConfig
 from pretraining.modeling import BertForPreTraining, BertLMHeadModel
 from pretraining.utils import to_sanitized_dict
+from pretraining.modeling_roberta import RobertaLMHeadModel
 
 logger = logging.getLogger(__name__)
 
 
 MODELS = {
     "bert-mlm": (BertLMHeadModel, PretrainedBertConfig, BertTokenizer),
-    "bert-mlm-roberta": (BertLMHeadModel, PretrainedRobertaConfig, RobertaTokenizer),
+    "bert-mlm-roberta": (RobertaLMHeadModel, PretrainedRobertaConfig, RobertaTokenizer),
     "bert-mlm-nsp": (BertForPreTraining, PretrainedBertConfig, BertTokenizer),
 }
 
@@ -81,7 +82,10 @@ class BasePretrainModel(object):
         if self.args.fasttext_model_path is not None:
             pretrained_embedding_np = np.load(args.fasttext_model_path)
             pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
-            self.network.bert.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
+            if model_type == 'bert-mlm':
+                self.network.bert.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
+            if model_type == 'bert-mlm-roberta':
+                self.network.roberta.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
 
     def forward(self, batch):
         outputs = self.network(batch)
