@@ -156,6 +156,17 @@ python run_glue.py \
   --lr_scheduler_type polynomial \
   --warmup_steps 50
 ```
+You can test your pretrained model or use the huggingface pretrained model by `run_classification.py`
+```bash
+python run_classification.py \
+   --model_name_or_path <path for model> or huggingface model
+   --fasttext_model_path <path for fasttext model>
+   --is_Ngram 1
+   --Ngram_path <path for ngram path>
+   --task_name <task_name amazon for example>
+   --data_dir <path to your dataset>
+   --output_dir <path to output dir>
+   --num_train_epochs 3
 
 ## Citation
 If you find this repository useful, you may cite [our paper](https://arxiv.org/abs/2211.17201) as:  
