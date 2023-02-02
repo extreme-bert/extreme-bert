@@ -94,7 +94,7 @@ def create_pretraining_dataset(
 
 
 class pretraining_dataset(Dataset):
-    def __init__(self, input_file, max_predictions_per_seq, no_nsp=False, is_Ngram=False):
+    def __init__(self, input_file, max_predictions_per_seq, no_nsp=True, is_Ngram=False):
         self.input_file = input_file
         self.max_predictions_per_seq = max_predictions_per_seq
         f = h5py.File(input_file, "r")
