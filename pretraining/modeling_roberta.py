@@ -296,7 +296,7 @@ class RobertaNgramEmbeddings(nn.Module):
 
     def __init__(self, config, args):
         super(RobertaNgramEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(args.Ngram_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.Ngram_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -378,7 +378,6 @@ class RobertaSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dense.bert_output_layer = True
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-    
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -503,7 +502,7 @@ class RobertaEncoder(nn.Module):
                 hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel
         )
 
-        self.num_hidden_Ngram_layers = args.num_hidden_Ngram_layers  # N_gram的embedding的层数
+        self.num_hidden_Ngram_layers = config.num_hidden_Ngram_layers  # N_gram的embedding的层数
         self.is_Ngram = args.is_Ngram  # 是否添加N_gram模块
 
         if hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel:
@@ -666,14 +665,14 @@ class RobertaPredictionHeadTransform(nn.Module):
 
 
 class RobertaLMPredictionHead(nn.Module):
-    def __init__(self, config, bert_model_embedding_weights):
+    def __init__(self, config, roberta_model_embedding_weights):
         super(RobertaLMPredictionHead, self).__init__()
         self.transform = RobertaPredictionHeadTransform(config)
         self.decoder = nn.Linear(
-            bert_model_embedding_weights.size(1), bert_model_embedding_weights.size(0), bias=False
+            roberta_model_embedding_weights.size(1), roberta_model_embedding_weights.size(0), bias=False
         )
-        self.decoder.weight = bert_model_embedding_weights
-        self.bias = nn.Parameter(torch.zeros(bert_model_embedding_weights.size(0)))
+        self.decoder.weight = roberta_model_embedding_weights
+        self.bias = nn.Parameter(torch.zeros(roberta_model_embedding_weights.size(0)))
         self.sparse_predict = config.sparse_mask_prediction
         if not config.sparse_mask_prediction:
             self.decoder.bias = self.bias
@@ -1027,41 +1026,3 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-
-
-import argparse
-from pretraining.configs import PretrainedRobertaConfig
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument(
-#         "--is_Ngram",
-#         default=True
-#     )
-#     parser.add_argument(
-#         "--Ngram_size",
-#         default=5
-#     )
-#     parser.add_argument(
-#         "--num_hidden_Ngram_layers",
-#         default=1
-#     )
-#     args = parser.parse_args()
-#     config = PretrainedRobertaConfig.from_pretrained('roberta-base')
-#     config.num_hidden_layers = 4
-#     network = RobertaForSequenceClassification(config, args)
-#     print(network)
-#     batch = []
-#     batch.append(None)
-#     batch.append(torch.LongTensor(torch.randint(0, 2, size=(5, 64))))
-#     batch.append(torch.ones(size=(5, 64), dtype=torch.long))
-#     batch.append(torch.zeros(size=(5, 64), dtype=torch.long))
-#     # batch.append(torch.LongTensor(torch.randint(-1, 4, size=(5, 64))))
-#     batch.append(None)
-#     batch.append(torch.LongTensor(torch.randint(0, 2, size=(5, 8))))
-#     batch.append(torch.ones(size=(5, 8), dtype=torch.long))
-#     batch.append(torch.zeros(size=(5, 8), dtype=torch.long))
-#     batch.append(torch.rand(size=(5, 64, 8)))
-#     output = network(batch[1], batch[3], batch[2], batch[5], batch[6], batch[7], batch[8])
-#     # output = network(batch[1], batch[3], batch[2])
-#     print(' ')
