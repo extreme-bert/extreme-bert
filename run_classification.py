@@ -19,13 +19,10 @@ import dataclasses
 import logging
 import os
 from tqdm.auto import tqdm, trange
-from typing import Dict, NamedTuple, Any, NewType
-from sklearn.metrics import f1_score
+from typing import Callable, Dict, List
+from packaging import version
 import numpy as np
-import shutil
-import json
-from enum import Enum
-import warnings
+import sys
 from dataclasses import dataclass
 from typing import List, Optional, Union
 from os.path import dirname, abspath
@@ -33,33 +30,36 @@ import random
 import math
 import re
 from typing import Callable, Iterable, Tuple
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LambdaLR
-from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset
-from torch.utils.data.distributed import DistributedSampler
-from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
-from transformers import PreTrainedTokenizerBase, BatchEncoding
 from transformers import RobertaTokenizer
-from pretraining.modeling_roberta import RobertaForSequenceClassification
-from transformers import PreTrainedModel
-from pretraining.modeling import BertForSequenceClassification
-from transformers import BertConfig
-from transformers import PretrainedConfig
-from transformers import PreTrainedTokenizer
-from filelock import FileLock
-from packaging import version
-import time
+from transformers import BertConfig, PretrainedConfig
 import torch
 import argparse
 from enum import Enum
 import socket
 from datetime import datetime
 import csv
-from torch.utils.data.dataset import Dataset
-from glue import glue_processors
+import json
+import shutil
+from transformers import PreTrainedTokenizerBase, BatchEncoding
+from pretraining.TDNA import TDNARobertaForSequenceClassification
+from typing import Dict, NamedTuple, Any, NewType
+from transformers import PreTrainedModel
+import warnings
 from torch import nn
+from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.dataset import Dataset
+from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data.sampler import RandomSampler, Sampler, SequentialSampler
+import math
+from typing import Callable, Iterable, Tuple
+import torch
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LambdaLR
 from pathlib import Path
+import time
+from glue import glue_processors
+from sklearn.metrics import f1_score
+
 
 
 class EvaluationStrategy(Enum):
@@ -74,11 +74,6 @@ class Split(Enum):
     test = "test"
 
 
-class EvalPrediction(NamedTuple):
-    predictions: Union[np.ndarray, Tuple[np.ndarray]]
-    label_ids: np.ndarray
-
-
 class PredictionOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: Optional[np.ndarray]
@@ -90,76 +85,24 @@ class TrainOutput(NamedTuple):
     training_loss: float
 
 
+class EvalPrediction(NamedTuple):
+    predictions: Union[np.ndarray, Tuple[np.ndarray]]
+    label_ids: np.ndarray
+
+
 logger = logging.getLogger(__name__)
 
 
-############################ for config ###########################
-class RobertaConfig(BertConfig):
-    model_type = "roberta"
+@dataclass
+class InputExample:
+    guid: str
+    text_a: str
+    text_b: Optional[str] = None
+    label: Optional[str] = None
 
-    def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, Ngram_vocab_size=6119, num_hidden_Ngram_layers=1,
-                 layer_norm_type='pytorch', encoder_ln_mode="post-ln", fused_linear_layer=True,
-                 layernorm_embedding=False, sparse_mask_prediction=True, **kwargs):
-        """Constructs RobertaConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-        self.Ngram_size = Ngram_vocab_size
-        self.num_hidden_Ngram_layers = num_hidden_Ngram_layers
-        self.layer_norm_type = layer_norm_type
-        self.encoder_ln_mode = encoder_ln_mode
-        self.fused_linear_layer = fused_linear_layer
-        self.layernorm_embedding = layernorm_embedding
-        self.sparse_mask_prediction = sparse_mask_prediction
-        self.useLN = True
-
-
-class AutoConfig:
-    def __init__(self):
-        raise EnvironmentError(
-            "AutoConfig is designed to be instantiated "
-            "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
-        )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        return RobertaConfig.from_dict(config_dict, **kwargs)
-
-
-############################ for config ###########################
-
-############################ for dataset and accuracy ###########################
-class TDNANgramDict(object):
-    """
-    Dict class to store the ngram
-    """
-
-    def __init__(self, ngram_freq_path, max_ngram_in_seq=20):
-        """Constructs TDNANgramDict
-        :param ngram_freq_path: ngrams with frequency
-        """
-        self.ngram_freq_path = ngram_freq_path
-        self.max_ngram_in_seq = max_ngram_in_seq
-        self.id_to_ngram_list = []
-        self.ngram_to_id_dict = {}
-
-        logger.info("loading ngram frequency file {}".format(ngram_freq_path))
-        with open(ngram_freq_path, "r", encoding="utf-8") as fin:
-            for i, line in enumerate(fin):
-                ngram = line.strip()
-                self.id_to_ngram_list.append(ngram)
-                self.ngram_to_id_dict[ngram] = i
-
-    def save(self, ngram_freq_path):
-        with open(ngram_freq_path, "w", encoding="utf-8") as fout:
-            for ngram, freq in self.ngram_to_freq_dict.items():
-                fout.write("{},{}\n".format(ngram, freq))
-
-
-def set_seed(seed: int):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    def to_json_string(self):
+        """Serializes this instance to a JSON string."""
+        return json.dumps(dataclasses.asdict(self), indent=2) + "\n"
 
 
 glue_tasks_num_labels = {
@@ -215,32 +158,56 @@ def glue_compute_metrics(task_name, preds, labels):
         raise KeyError(task_name)
 
 
-@dataclass
-class InputExample:
-    guid: str
-    text_a: str
-    text_b: Optional[str] = None
-    label: Optional[str] = None
+class TDNANgramDict(object):
+    """
+    Dict class to store the ngram
+    """
 
-    def to_json_string(self):
-        """Serializes this instance to a JSON string."""
-        return json.dumps(dataclasses.asdict(self), indent=2) + "\n"
+    def __init__(self, ngram_freq_path, max_ngram_in_seq=20):
+        """Constructs TDNANgramDict
+        :param ngram_freq_path: ngrams with frequency
+        """
+        self.ngram_freq_path = ngram_freq_path
+        self.max_ngram_in_seq = max_ngram_in_seq
+        self.id_to_ngram_list = []
+        self.ngram_to_id_dict = {}
+
+        logger.info("loading ngram frequency file {}".format(ngram_freq_path))
+        with open(ngram_freq_path, "r", encoding="utf-8") as fin:
+            for i, line in enumerate(fin):
+                ngram = line.strip()
+                self.id_to_ngram_list.append(ngram)
+                self.ngram_to_id_dict[ngram] = i
+
+    def save(self, ngram_freq_path):
+        with open(ngram_freq_path, "w", encoding="utf-8") as fout:
+            for ngram, freq in self.ngram_to_freq_dict.items():
+                fout.write("{},{}\n".format(ngram, freq))
 
 
-glue_output_modes = {
-    "citation_intent": "classification",
-    "ag": "classification",
-    "amazon": "classification",
-    "chemprot": "classification",
-    "hyperpartisan_news": "classification",
-    "imdb": "classification",
-    "rct-20k": "classification",
-    "sciie": "classification",
-    "SST2": "classification"
-}
+class RobertaConfig(BertConfig):
+    model_type = "roberta"
 
+    def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, Ngram_size=6119, num_hidden_Ngram_layers=1,
+                 sparse_mask_prediction=True, **kwargs):
+        """Constructs RobertaConfig."""
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        self.Ngram_size = Ngram_size
+        self.num_hidden_Ngram_layers = num_hidden_Ngram_layers
+        self.sparse_mask_prediction = sparse_mask_prediction
 
-############################ for dataset and accuracy ###########################
+class AutoConfig:
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoConfig is designed to be instantiated "
+            "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
+        )
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        return RobertaConfig.from_dict(config_dict, **kwargs)
+
 
 ############################ for process of dataset #############################
 
@@ -260,9 +227,22 @@ class InputFeatures:
         return json.dumps(dataclasses.asdict(self)) + "\n"
 
 
+glue_output_modes = {
+    "citation_intent": "classification",
+    "ag": "classification",
+    "amazon": "classification",
+    "chemprot": "classification",
+    "hyperpartisan_news": "classification",
+    "imdb": "classification",
+    "rct-20k": "classification",
+    "sciie": "classification",
+    "SST2": "classification"
+}
+
+
 def glue_convert_examples_to_features(
         examples: List[InputExample],
-        tokenizer: PreTrainedTokenizer,
+        tokenizer,
         Ngram_dict,
         max_length: Optional[int] = None,
         task=None,
@@ -277,7 +257,7 @@ def glue_convert_examples_to_features(
 
 def _glue_convert_examples_to_features(
         examples: List[InputExample],
-        tokenizer: PreTrainedTokenizer,
+        tokenizer,
         Ngram_dict,
         max_length: Optional[int] = None,
         task=None,
@@ -368,7 +348,7 @@ def _glue_convert_examples_to_features(
 
         import numpy as np
         # ngram_mask_array 为长度为Ngram_dict长度的array，前ngram_ids为1，其他为0
-        ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq, dtype=np.bool)
+        ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
         ngram_mask_array[:len(ngram_ids)] = 1
 
         # record the masked positions
@@ -477,7 +457,13 @@ class GlueDataset(Dataset):
 
 ############################ for process of dataset #############################
 
-############################ optimal and schedule  ##############################
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
 class AdamW(Optimizer):
 
     def __init__(
@@ -559,15 +545,11 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-############################ optimal and schedule  ##############################
-
-
-###########################  trainer  ##########################################
+#################################################################trainer###################
 """
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 InputDataClass = NewType("InputDataClass", Any)
-DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str, torch.Tensor]])
 PREFIX_CHECKPOINT_DIR = "checkpoint"
 
 
@@ -644,31 +626,16 @@ class Trainer:
 
     def __init__(
             self,
-            model: PreTrainedModel = None,
-            # ([`PreTrainedModel`] or `torch.nn.Module`, *optional*):
-            # The model to train, evaluate or use for predictions. If not provided, a `model_init` must be passed.
+            model,
             args=None,
-            # The arguments to tweak for training. Will default to a basic instance of [`TrainingArguments`] with the
-            # `output_dir` set to a directory named *tmp_trainer* in the current directory if not provided.
-            data_collator: Optional[DataCollator] = None,
-            # The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
-            # default to [`default_data_collator`] if no `tokenizer` is provided, an instance of
-            # [`DataCollatorWithPadding`] otherwise.
+            data_collator=None,
             train_dataset: Optional[Dataset] = None,
             eval_dataset: Optional[Dataset] = None,
             tokenizer: Optional["PreTrainedTokenizerBase"] = None,
-            # The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
-            #  maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
-            #  interrupted training or reuse the fine-tuned model.
             model_init: Callable[[], PreTrainedModel] = None,
             compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-            # The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
-            # a dictionary string to metric values
             tb_writer: Optional["SummaryWriter"] = None,
             optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-            # A tuple
-            # containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your model
-            # and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
             **kwargs,
     ):
         self.args = args
@@ -952,7 +919,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
 
         loss = self.compute_loss(model, inputs)
-
+        # print(loss)
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
@@ -1120,7 +1087,7 @@ class Trainer:
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         has_labels = all(inputs.get(k) is not None for k in self.args.label_names)
         inputs = self._prepare_inputs(inputs)
-
+        # 0.0632, -0.0430, -0.1367, -0.0357
         with torch.no_grad():
             outputs = model(**inputs)
             if has_labels:
@@ -1166,40 +1133,36 @@ class Trainer:
             return 0
 
 
-###########################  trainer  ##########################################
-
+###########################################trainer###############################
 def main():
     # See all possible arguments in src/transformers/args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
     parser = argparse.ArgumentParser()
-    # model_name_or_path Huggingface的预训练模型
-    # pretrained fastTest model预训练好的fastText
-    # N_gram: 提取的N_gram模型
+    parser.add_argument("--is_Ngram",
+                        default=True,
+                        help="whether to add a Ngram module or not")
     parser.add_argument("--model_name_or_path",
-                        default='roberta-base',
+                        default='/root/autodl-tmp/PATP_model/rct-20k',
                         type=str,
-                        required=True,
                         help="Path to pretrained model or model identifier from huggingface.co/models")
     parser.add_argument("--fasttext_model_path",
-                        default=None,
+                        default='/root/guhao/TAPT/dataset/fasttext/rct-20k.npy',
                         type=str,
                         required=False,
                         help="Path to pretrained fastText model for initializing ngram embeddings")
-    parser.add_argument("--is_Ngram",
-                        default=True,
-                        help="whether to use a Ngram module")
-    parser.add_argument("--num_hidden_Ngram_layers",
-                        default=1,
-                        help="the number of ngram layers")
     parser.add_argument("--Ngram_path",
-                        default=None,
+                        default='/root/guhao/TAPT/dataset/ngram/pmi_rct-20k_ngram.txt',
                         type=str,
-                        required=True,
                         help="Path to Ngram path")
     parser.add_argument("--config_name",
                         default=None,
+                        type=str,
+                        required=False,
+                        help="Pretrained config name or path if not the same as model_name")
+    parser.add_argument("--num_hidden_Ngram_layers",
+                        default=1,
                         type=str,
                         required=False,
                         help="Pretrained config name or path if not the same as model_name")
@@ -1208,7 +1171,6 @@ def main():
                         type=str,
                         required=False,
                         help="Pretrained tokenizer name or path if not the same as model_name")
-    # cache_dir 存放预训练模型的地址
     parser.add_argument("--cache_dir",
                         default=None,
                         type=str,
@@ -1216,14 +1178,12 @@ def main():
                         help="Where do you want to store the pretrained models downloaded from s3")
 
     parser.add_argument("--task_name",
-                        default='amazon',
+                        default='rct-20k',
                         type=str,
-                        required=True,
                         help="The name of the task")
-    parser.add_argument("--data_dir",  # 在utils.py中的GlueDataset中
-                        default=None,
+    parser.add_argument("--data_dir",
+                        default='/root/guhao/TAPT/dataset/glue_dataset/rct-20k',
                         type=str,
-                        required=True,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--max_seq_length",
                         default=256,
@@ -1236,24 +1196,20 @@ def main():
                         help="Overwrite the cached training and evaluation sets")
 
     parser.add_argument("--output_dir",
-                        default=None,
+                        default='/root/autodl-tmp/Glue_model/rct-20k/with',
                         type=str,
-                        required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
+
     parser.add_argument("--overwrite_output_dir",
-                        # action='store_true',
                         default=True,
                         help="Overwrite the content of the output directory")
     parser.add_argument("--do_train",
-                        # action='store_false',
                         default=True,
                         help="Whether to run training")
     parser.add_argument("--do_eval",
-                        # action='store_false',
                         default=True,
                         help="Whether to run eval on the dev set.")
     parser.add_argument("--do_predict",
-                        # action='store_false',
                         default=True,
                         help="Whether to run predictions on the test set.")
     parser.add_argument("--evaluate_during_training",
@@ -1282,7 +1238,6 @@ def main():
                         type=int,
                         required=False,
                         help="Deprecated, the use of `--per_device_train_batch_size` is preferred. ")
-
     parser.add_argument("--per_gpu_eval_batch_size",
                         default=None,
                         type=int,
@@ -1294,7 +1249,7 @@ def main():
                         required=False,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--learning_rate",
-                        default=4e-5,
+                        default=4.02e-5,
                         type=float,
                         required=False,
                         help="The initial learning rate for Adam.")
@@ -1324,7 +1279,7 @@ def main():
                         required=False,
                         help="Max gradient norm.")
     parser.add_argument("--num_train_epochs",
-                        default=1.0,
+                        default=3.0,
                         type=float,
                         required=False,
                         help="Total number of training epochs to perform.")
@@ -1482,35 +1437,31 @@ def main():
     except KeyError:
         raise ValueError("Task not found: %s" % (args.task_name))
 
-    Ngram_dict = TDNANgramDict(args.Ngram_path)  # Dict class to store the ngram
-    args.Ngram_size = len(Ngram_dict.ngram_to_id_dict)
+    Ngram_dict = TDNANgramDict(args.Ngram_path)
     config = AutoConfig.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task=args.task_name,
-        cache_dir=args.cache_dir,
-        Ngram_vocab_size=len(Ngram_dict.id_to_ngram_list),
+        Ngram_size=len(Ngram_dict.id_to_ngram_list),
+        num_hidden_Ngram_layers=args.num_hidden_Ngram_layers
     )
     tokenizer = RobertaTokenizer.from_pretrained(
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
-        cache_dir=args.cache_dir,
-        Ngram_vocab_size=len(Ngram_dict.id_to_ngram_list),
     )
 
-    model = RobertaForSequenceClassification.from_pretrained(
+    model = TDNARobertaForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
         config=config,
-        cache_dir=args.cache_dir,
         args=args
     )
-    # print(model)
+    print(model)
     total_num = sum(p.numel() for p in model.parameters())
-
-    if args.fasttext_model_path is not None:
-        pretrained_embedding_np = np.load(args.fasttext_model_path)
-        pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
-        model.roberta.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
+    if args.is_Ngram:
+        if args.fasttext_model_path is not None:
+            pretrained_embedding_np = np.load(args.fasttext_model_path)
+            pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
+            model.roberta.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
 
     # Get datasets
     train_dataset = (
@@ -1545,6 +1496,7 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=build_compute_metrics_fn(args.task_name),
+
     )
 
     # Training
@@ -1584,7 +1536,7 @@ def main():
             f_eval = open(eval_pred_file, "w", encoding='utf-8')
             f_eval.write("input" + "\t" + "label" + "\t" + "pred" + "\n")
 
-            with open(os.path.join(args.data_dir, "dev.tsv"), "r", encoding="utf-8") as f:
+            with open(os.path.join(args.data_dir, "dev.tsv"), "r", encoding="utf-8-sig") as f:
                 input_labels = list(csv.reader(f, delimiter="\t"))
 
             for line, pred in zip(input_labels, predictions):
@@ -1597,7 +1549,7 @@ def main():
                 args.output_dir, f"eval_results_{eval_dataset.args.task_name}.txt"
             )
             if trainer.is_world_process_zero():
-                with open(output_eval_file, "w", encoding='utf-8') as writer:
+                with open(output_eval_file, "w") as writer:
                     logger.info("***** Eval results {} *****".format(eval_dataset.args.task_name))
                     for key, value in metrics.items():
                         logger.info("  %s = %s", key, value)
@@ -1618,7 +1570,7 @@ def main():
             trainer.compute_metrics = build_compute_metrics_fn(test_dataset.args.task_name)
             test_result = trainer.evaluate(eval_dataset=test_dataset)
             metrics = test_result.metrics
-            predictions = np.argmax(test_result.predictions, axis=1) + 1
+            predictions = np.argmax(test_result.predictions, axis=1)
             label_ids = test_result.label_ids + 1
 
             test_pred_file = os.path.join(
@@ -1627,7 +1579,7 @@ def main():
             f_test = open(test_pred_file, "w", encoding='utf-8')
             f_test.write("input" + "\t" + "label" + "\t" + "pred" + "\n")
 
-            with open(os.path.join(args.data_dir, "test.tsv"), "r", encoding="utf-8") as f:
+            with open(os.path.join(args.data_dir, "test.tsv"), "r", encoding="utf-8-sig") as f:
                 input_labels = list(csv.reader(f, delimiter="\t"))
             for line, pred in zip(input_labels, predictions):
                 text_a = line[0]
@@ -1639,7 +1591,7 @@ def main():
                 args.output_dir, f"test_results_{test_dataset.args.task_name}.txt"
             )
             if trainer.is_world_process_zero():
-                with open(output_test_file, "w", encoding='utf-8') as writer:
+                with open(output_test_file, "w") as writer:
                     logger.info("***** Test results {} *****".format(test_dataset.args.task_name))
                     for key, value in metrics.items():
                         logger.info("  %s = %s", key, value)
