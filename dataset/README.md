@@ -208,15 +208,14 @@ python generate_samples.py \
     --model_name bert-large-uncased \
     --max_predictions_per_seq 20 \
     --n_processes 16 \
-    --Ngram_path <path_to_Ngram> \
-    --Ngram_flag 1
+    --Ngram_path <path_to_Ngram> 
 ```
 
 ## Ngram
 if we add the Ngram module to the extreme-bert, To extract n-grams for datasets, please run `pmi_ngram.py` with the following parameters:
 `--dataset`: the path of training data file
 `--output_dir`: the path of output directory,
-We provide two ngram.txt here.
+
 
 To use fasttext to initilize the embedding for the Ngram, please Training word vectors using fasttext on the raw data following https://fasttext.cc/docs/en/unsupervised-tutorial.html
 ```bath 
