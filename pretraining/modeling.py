@@ -295,9 +295,9 @@ class bertNgramEmbeddings(nn.Module):
     """Construct the embeddings from ngram, position and token_type embeddings.
     """
 
-    def __init__(self, config, args):
+    def __init__(self, config):
         super(bertNgramEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(args.Ngram_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.Ngram_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -503,7 +503,7 @@ class BertEncoder(nn.Module):
                 hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel
         )
 
-        self.num_hidden_Ngram_layers = args.num_hidden_Ngram_layers  # N_gram的embedding的层数
+        self.num_hidden_Ngram_layers = config.num_hidden_Ngram_layers  # N_gram的embedding的层数
         self.is_Ngram = args.is_Ngram  # 是否添加N_gram模块
 
         if hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel:
@@ -813,7 +813,7 @@ class BertModel(BertPreTrainedModel):
         # set pad_token_id that is used for sparse attention padding
         self.is_Ngram = args.is_Ngram
         if self.is_Ngram:
-            self.Ngram_embeddings = bertNgramEmbeddings(config, args)
+            self.Ngram_embeddings = bertNgramEmbeddings(config)
         self.pad_token_id = (
             config.pad_token_id
             if hasattr(config, "pad_token_id") and config.pad_token_id is not None
@@ -1253,17 +1253,16 @@ class BertForSequenceClassification(BertPreTrainedModel):
             checkpoint_activations=False,
             **kwargs,
     ):
-        
         if not self.is_Ngram:
             input_Ngram_ids = None
             Ngram_attention_mask = None
             Ngram_token_type_ids = None
             Ngram_position_matrix = None
-        
+
         outputs = self.bert(
-            input_ids,
-            token_type_ids,
-            attention_mask,
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
             input_Ngram_ids=input_Ngram_ids,
             Ngram_attention_mask=Ngram_attention_mask,
             Ngram_token_type_ids=Ngram_token_type_ids,
@@ -1293,3 +1292,4 @@ class BertForSequenceClassification(BertPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
+
