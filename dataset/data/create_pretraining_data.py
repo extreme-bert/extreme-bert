@@ -757,14 +757,13 @@ def main():
                         type=str,
                         # required=True,
                         help="Path to Ngram path")
-
-    parser.add_argument(
-        "--Ngram_flag",
-        default=F,
-        help="whether to create a dataset with Ngram"
-    )
+    
 
     args = parser.parse_args()
+    
+    args.Ngram_flag = False
+    if args.Ngram_path is not None:
+        args.Ngram_flag = True
     Ngram_dict = TDNANgramDict(args.Ngram_path)
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True, do_lower_case=args.do_lower_case,
