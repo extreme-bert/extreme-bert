@@ -762,9 +762,10 @@ def main():
     args = parser.parse_args()
     
     args.Ngram_flag = False
+    Ngram_dict = None
     if args.Ngram_path is not None:
         args.Ngram_flag = True
-    Ngram_dict = TDNANgramDict(args.Ngram_path)
+        Ngram_dict = TDNANgramDict(args.Ngram_path)
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True, do_lower_case=args.do_lower_case,
                                               max_len=1024)
