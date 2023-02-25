@@ -718,9 +718,10 @@ def main():
 
     args = parser.parse_args()
     args.Ngram_flag = False
+    Ngram_dict = None
     if args.Ngram_path is not None:
         args.Ngram_flag = True
-    Ngram_dict = TDNANgramDict(args.Ngram_path)
+        Ngram_dict = TDNANgramDict(args.Ngram_path)
     tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, max_len=args.max_seq_length)
 
     input_files = []
