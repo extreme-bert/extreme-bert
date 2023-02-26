@@ -708,6 +708,7 @@ def main():
     parser.add_argument(
         "--no_nsp",
         default=True,
+        action="store_true",
         help="Generate samples without 2nd sentence segments (no NSP task)",
     )
     parser.add_argument("--Ngram_path",
