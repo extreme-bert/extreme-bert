@@ -1144,16 +1144,16 @@ def main():
                         default=True,
                         help="whether to add a Ngram module or not")
     parser.add_argument("--model_name_or_path",
-                        default='/root/autodl-tmp/PATP_model/rct-20k',
+                        default='roberta-base',
                         type=str,
                         help="Path to pretrained model or model identifier from huggingface.co/models")
     parser.add_argument("--fasttext_model_path",
-                        default='/root/guhao/TAPT/dataset/fasttext/rct-20k.npy',
+                        default='/root/guhao/TAPT/dataset/fasttext/chemprot.npy',
                         type=str,
                         required=False,
                         help="Path to pretrained fastText model for initializing ngram embeddings")
     parser.add_argument("--Ngram_path",
-                        default='/root/guhao/TAPT/dataset/ngram/pmi_rct-20k_ngram.txt',
+                        default='/root/guhao/TAPT/dataset/ngram/pmi_chemprot_ngram.txt',
                         type=str,
                         help="Path to Ngram path")
     parser.add_argument("--config_name",
@@ -1178,11 +1178,11 @@ def main():
                         help="Where do you want to store the pretrained models downloaded from s3")
 
     parser.add_argument("--task_name",
-                        default='rct-20k',
+                        default='chemprot',
                         type=str,
                         help="The name of the task")
     parser.add_argument("--data_dir",
-                        default='/root/guhao/TAPT/dataset/glue_dataset/rct-20k',
+                        default='/root/guhao/TAPT/dataset/glue_dataset/chemprot',
                         type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--max_seq_length",
@@ -1196,7 +1196,7 @@ def main():
                         help="Overwrite the cached training and evaluation sets")
 
     parser.add_argument("--output_dir",
-                        default='/root/autodl-tmp/Glue_model/rct-20k/with',
+                        default='/root/autodl-tmp/Glue_model/chemprot/with',
                         type=str,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
@@ -1249,7 +1249,7 @@ def main():
                         required=False,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     parser.add_argument("--learning_rate",
-                        default=4.02e-5,
+                        default=3e-5,
                         type=float,
                         required=False,
                         help="The initial learning rate for Adam.")
@@ -1596,6 +1596,8 @@ def main():
                     for key, value in metrics.items():
                         logger.info("  %s = %s", key, value)
                         writer.write("%s = %s\n" % (key, value))
+                        print(key)
+                        print(value)
 
     return eval_results
 
