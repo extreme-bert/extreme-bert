@@ -46,6 +46,8 @@ class PretrainedBertConfig(BertConfig):
         position_embedding_type="absolute",
         use_cache = True,
         classifier_dropout=None,
+        Ngram_size=None,
+        num_hidden_Ngram_layers=None,
         **kwargs
     ):
         super().__init__(
@@ -74,7 +76,8 @@ class PretrainedBertConfig(BertConfig):
         self.sparse_mask_prediction = sparse_mask_prediction
         self.layer_norm_type = layer_norm_type
         self.layernorm_embedding = layernorm_embedding
-
+        self.Ngram_size = Ngram_size
+        self.num_hidden_Ngram_layers = num_hidden_Ngram_layers
 
 class PretrainedRobertaConfig(PretrainedBertConfig):
     model_type = "roberta"
