@@ -21,33 +21,35 @@
 import json
 import logging
 import os
-
+import numpy as np
+import torch
 from transformers import BertTokenizer, RobertaTokenizer
 
 from pretraining.configs import PretrainedBertConfig, PretrainedRobertaConfig
 from pretraining.modeling import BertForPreTraining, BertLMHeadModel
 from pretraining.utils import to_sanitized_dict
 from pretraining.modeling_roberta import RobertaLMHeadModel
+from pretraining.TDNA import TDNARobertaForMaskedLM
 
 logger = logging.getLogger(__name__)
-
 
 MODELS = {
     "bert-mlm": (BertLMHeadModel, PretrainedBertConfig, BertTokenizer),
     "bert-mlm-roberta": (RobertaLMHeadModel, PretrainedRobertaConfig, RobertaTokenizer),
     "bert-mlm-nsp": (BertForPreTraining, PretrainedBertConfig, BertTokenizer),
+    "roberta-mlm-TDNA": (TDNARobertaForMaskedLM, PretrainedRobertaConfig, RobertaTokenizer),
 }
 
 
 class BasePretrainModel(object):
     def __init__(
-        self,
-        args,
-        model_type=None,
-        model_name_or_path=None,
-        tokenizer=None,
-        config=None,
-        model_kwargs={},
+            self,
+            args,
+            model_type=None,
+            model_name_or_path=None,
+            tokenizer=None,
+            config=None,
+            model_kwargs={},
     ):
         if not model_type:
             # getting default model type from args
@@ -75,16 +77,21 @@ class BasePretrainModel(object):
                 config = config_cls.from_pretrained(model_name_or_path)
 
         self.args.vocab_size = config.vocab_size
-
         self.tokenizer = tokenizer
+
+        if args.is_Ngram:
+            config.Ngram_size = args.Ngram_size
+            config.num_hidden_Ngram_layers = args.num_hidden_Ngram_layers
+
         self.config = config
         self.network = model_cls(self.config, self.args, **model_kwargs)
-        if self.args.fasttext_model_path is not None:
+        print(self.network)
+        if args.is_Ngram and self.args.fasttext_model_path is not None:
             pretrained_embedding_np = np.load(args.fasttext_model_path)
             pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
             if model_type == 'bert-mlm':
                 self.network.bert.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
-            if model_type == 'bert-mlm-roberta':
+            if model_type in ['bert-mlm-roberta', 'roberta-mlm-TDNA']:
                 self.network.roberta.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
 
     def forward(self, batch):
