@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Create masked LM/next sentence masked_lm TF examples for BERT."""
+"""Create masked LM/next sentence masked_lm TF examples for Roberta."""
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
@@ -358,9 +358,7 @@ def create_instances_from_document_no_nsp(
                             if character_segment in Ngram_dict.ngram_to_id_dict:
                                 ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
                                 ngram_matches.append([ngram_index, q, p, character_segment])
-                    #  这里是对长度从2到8进行遍历,开始的距离从0开始，然后取得tokens的连续ngram,判断是否在N_gram字典里面
-                    #  记录N_gram的id,N_gram的长度,开始的位置,以及N_gram自己
-
+                    
                     max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
                     if len(ngram_matches) > max_word_in_seq_proportion:
                         ngram_matches = ngram_matches[:max_word_in_seq_proportion]
@@ -370,11 +368,9 @@ def create_instances_from_document_no_nsp(
                     ngram_lengths = [ngram[2] for ngram in ngram_matches]
                     ngram_tuples = [ngram[3] for ngram in ngram_matches]
                     ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
-                    # ngram_ids为N_gram的id,ngram_positions为N_gram开始的位置,ngram_lengths为N_gram开始的位置
-                    # ngram_tuples为哪一个N_gram,ngram_seg_ids为N_gram对应的句子是sentence_a
 
                     ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
-                    ngram_mask_array[:len(ngram_ids)] = 1  # 有N_gram的为1,0对应于pad部分
+                    ngram_mask_array[:len(ngram_ids)] = 1
 
                     # record the masked positions
                     ngram_positions_matrix = np.zeros(shape=(max_seq_length, Ngram_dict.max_ngram_in_seq),
@@ -384,12 +380,10 @@ def create_instances_from_document_no_nsp(
 
                     # Zero-pad up to the max word in seq length.
                     padding = [0] * (Ngram_dict.max_ngram_in_seq - len(ngram_ids))
-                    ngram_ids += padding  # ngram_ids 进行pad,0对应于没有ngram的pad部分
+                    ngram_ids += padding 
                     ngram_lengths += padding
                     ngram_seg_ids += padding
-                    # ngram_ids,ngram_lengths,ngram_seg_ids,ngram_mask_array均为[Ngram_dict.max_ngram_in_seq,]的列表
-                    # Ngram_position_matrix表示token与N_gram的位置关系,为[max_seq_length,Ngram_dict.max_ngram_in_seq]
-
+                    
                 (tokens, masked_lm_positions, masked_lm_labels) = create_masked_lm_predictions(
                     tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng
                 )
@@ -635,22 +629,22 @@ def main():
         "--tokenizer_name",
         default='roberta-base',
         type=str,
-        # required=True,
+        required=True,
         help="The name of tokenizer",
     )
 
     parser.add_argument(
         "--input_file",
-        default='../data_sharded/training0.txt',
+        default=None,
         type=str,
-        # required=True,
+        required=True,
         help="The input train corpus. can be directory with .txt files or a path to a single file",
     )
     parser.add_argument(
         "--output_file",
         default=None,
         type=str,
-        # required=True,
+        required=True,
         help="The output file where the model checkpoints will be written.",
     )
 
@@ -712,9 +706,8 @@ def main():
         help="Generate samples without 2nd sentence segments (no NSP task)",
     )
     parser.add_argument("--Ngram_path",
-                        default='../ngram/pmi_imdb_ngram.txt',
+                        default=None,
                         type=str,
-                        # required=True,
                         help="Path to Ngram path")
 
     args = parser.parse_args()
