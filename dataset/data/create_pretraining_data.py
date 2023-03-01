@@ -31,7 +31,7 @@ import numpy as np
 from tqdm import tqdm
 from transformers import AutoTokenizer
 
-from dataset.data.utils import convert_to_unicode
+from utils import convert_to_unicode
 
 
 class TDNANgramDict(object):
