@@ -184,7 +184,6 @@ class PretrainScriptParamsArguments:
         metadata={"help": "How many steps should the throughput (im Samples/s) be logged."},
     )
         
-    # add by guhao
     is_Ngram: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to use a Ngram_modle"}
@@ -204,7 +203,6 @@ class PretrainScriptParamsArguments:
         default=None,
         metadata={'help': "Path to fastext model init"}
     )
-    # add by guhao
 
     def __post_init__(self):
         self.no_nsp = not self.add_nsp
