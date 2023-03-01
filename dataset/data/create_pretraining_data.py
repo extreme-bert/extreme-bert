@@ -207,9 +207,9 @@ def write_instance_to_example_file(
 
 
 def create_training_instances(
-        input_files,  # 当input_file是一个文件夹路径时，将其文件夹下面的所有以txt结尾的文件的路径加入到input_files下
+        input_files,
         tokenizer,
-        Ngram_dict,  # guhao
+        Ngram_dict,
         Ngram_flag,
         max_seq_length,
         dupe_factor,
@@ -274,7 +274,7 @@ def create_training_instances(
                 instances.extend(
                     create_instances_from_document_no_nsp(
                         all_documents,
-                        Ngram_dict,  # guhao
+                        Ngram_dict, 
                         Ngram_flag,
                         document_index,
                         max_seq_length,
@@ -307,7 +307,7 @@ def create_training_instances(
 
 def create_instances_from_document_no_nsp(
         all_documents,
-        Ngram_dict,  # guhao
+        Ngram_dict, 
         Ngram_flag,
         document_index,
         max_seq_length,
@@ -348,7 +348,6 @@ def create_instances_from_document_no_nsp(
     while i < len(document):
         segment = document[i]
         current_chunk.append(segment)
-        # current_chunk是以每一行为单位的
         current_length += len(segment)
         if current_length >= target_seq_length:
             if current_chunk:
@@ -357,7 +356,7 @@ def create_instances_from_document_no_nsp(
                     tokens_a.extend(current_chunk[j])
 
                 truncate_single_seq(tokens_a, max_num_tokens, rng)
-                # tokens_a 为截断后的一个单词列表,设长度为len_a
+                
                 assert len(tokens_a) >= 1
 
                 tokens = []
@@ -372,11 +371,10 @@ def create_instances_from_document_no_nsp(
                 # tokens.append("[SEP]")
                 tokens.append(tokenizer.sep_token)
                 segment_ids.append(0)
-                # tokens 为sentence_a加入[cls]和[sep]的句子
-                # segment_ids为句子的id,0对应sentence_a
+                
 
                 assert len(tokens) <= max_seq_length
-                '''_______guhao______'''
+                
                 ngram_ids = None
                 ngram_mask_array = None
                 ngram_seg_ids = None
@@ -392,8 +390,6 @@ def create_instances_from_document_no_nsp(
                             if character_segment in Ngram_dict.ngram_to_id_dict:
                                 ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
                                 ngram_matches.append([ngram_index, q, p, character_segment])
-                    #  这里是对长度从2到8进行遍历,开始的距离从0开始，然后取得tokens的连续ngram,判断是否在N_gram字典里面
-                    #  记录N_gram的id,N_gram的长度,开始的位置,以及N_gram自己
 
                     max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
                     if len(ngram_matches) > max_word_in_seq_proportion:
@@ -404,11 +400,9 @@ def create_instances_from_document_no_nsp(
                     ngram_lengths = [ngram[2] for ngram in ngram_matches]
                     ngram_tuples = [ngram[3] for ngram in ngram_matches]
                     ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
-                    # ngram_ids为N_gram的id,ngram_positions为N_gram开始的位置,ngram_lengths为N_gram开始的位置
-                    # ngram_tuples为哪一个N_gram,ngram_seg_ids为N_gram对应的句子是sentence_a
 
                     ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
-                    ngram_mask_array[:len(ngram_ids)] = 1  # 有N_gram的为1,0对应于pad部分
+                    ngram_mask_array[:len(ngram_ids)] = 1 
 
                     # record the masked positions
                     ngram_positions_matrix = np.zeros(shape=(max_seq_length, Ngram_dict.max_ngram_in_seq),
@@ -418,14 +412,11 @@ def create_instances_from_document_no_nsp(
 
                     # Zero-pad up to the max word in seq length.
                     padding = [0] * (Ngram_dict.max_ngram_in_seq - len(ngram_ids))
-                    ngram_ids += padding  # ngram_ids 进行pad,0对应于没有ngram的pad部分
+                    ngram_ids += padding 
                     ngram_lengths += padding
                     ngram_seg_ids += padding
-                    # ngram_ids,ngram_lengths,ngram_seg_ids,ngram_mask_array均为[Ngram_dict.max_ngram_in_seq,]的列表
-                    # Ngram_position_matrix表示token与N_gram的位置关系,为[max_seq_length,Ngram_dict.max_ngram_in_seq]
-
-                '''_______guhao______'''
-
+                  
+              
                 (tokens, masked_lm_positions, masked_lm_labels) = create_masked_lm_predictions(
                     tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng, tokenizer,
                 )
@@ -676,21 +667,21 @@ def main():
         "--tokenizer_name",
         default='bert-large-uncased',
         type=str,
-        # required=True,
+        required=True,
         help="The name of tokenizer",
     )
     parser.add_argument(
         "--input_file",
-        default='../data_sharded/training0.txt',
+        default=None,
         type=str,
-        # required=True,
+        required=True,
         help="The input train corpus. can be directory with .txt files or a path to a single file",
     )
     parser.add_argument(
         "--output_file",
-        default='./output',
+        default=None,
         type=str,
-        # required=True,
+        required=True,
         help="The output file where the model checkpoints will be written.",
     )
 
@@ -753,9 +744,8 @@ def main():
     )
 
     parser.add_argument("--Ngram_path",
-                        default='./ngram.txt',
+                        default=None',
                         type=str,
-                        # required=True,
                         help="Path to Ngram path")
     
 
