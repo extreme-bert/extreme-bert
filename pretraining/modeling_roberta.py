@@ -289,7 +289,6 @@ class RobertaEmbeddings(nn.Module):
         return embeddings
 
 
-# add by guhao
 class RobertaNgramEmbeddings(nn.Module):
     """Construct the embeddings from ngram, position and token_type embeddings.
     """
@@ -502,8 +501,8 @@ class RobertaEncoder(nn.Module):
                 hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel
         )
 
-        self.num_hidden_Ngram_layers = config.num_hidden_Ngram_layers  # N_gram的embedding的层数
-        self.is_Ngram = args.is_Ngram  # 是否添加N_gram模块
+        self.num_hidden_Ngram_layers = config.num_hidden_Ngram_layers  
+        self.is_Ngram = args.is_Ngram 
 
         if hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel:
             from deepspeed import DeepSpeedTransformerConfig, DeepSpeedTransformerLayer
@@ -558,8 +557,8 @@ class RobertaEncoder(nn.Module):
             self,
             hidden_states,
             attention_mask,
-            Ngram_hidden_states=None,  # add by guhao
-            Ngram_position_matrix=None,  # add by guhao
+            Ngram_hidden_states=None,  
+            Ngram_position_matrix=None,  
             Ngram_attention_mask=None,
             output_all_encoded_layers=True,
             checkpoint_activations=False,
@@ -602,16 +601,15 @@ class RobertaEncoder(nn.Module):
                     # get all attention_probs from layers
                     if output_attentions:
                         all_attentions = self.add_attention(all_attentions, attention_probs)
-                # add by guhao
+              
                 if self.is_Ngram:
                     if i < self.num_hidden_Ngram_layers:
                         # [batch_size,max_len_seq,hidden_size]
                         Ngram_hidden_states = self.Ngram_layer[i](Ngram_hidden_states, Ngram_attention_mask)[0]
                         # [batch_size,max_seq,max_len_seq]
-                        # 对应一个seq里面的每一个token，对应Ngram_position_matrix的一个矩阵，如果对应的N_gram的地方为1，则将其对应的hidden_states加入
                         Ngram_states = torch.bmm(Ngram_position_matrix.float(), Ngram_hidden_states.float())
                         hidden_states += Ngram_states
-                # add by guhao
+                
 
                 if output_all_encoded_layers:
                     all_encoder_layers.append(hidden_states)
@@ -624,7 +622,7 @@ class RobertaEncoder(nn.Module):
         outputs = (all_encoder_layers,)
         if output_attentions:
             outputs += (all_attentions,)
-        return outputs  # 最后的outputs为all_encoder_layers和all_attentions如果output_attentions为True
+        return outputs 
 
 
 class RobertaPooler(nn.Module):
@@ -777,7 +775,7 @@ class RobertaModel(RobertaPreTrainedModel):
             input_ids,
             token_type_ids=None,
             attention_mask=None,
-            input_Ngram_ids=None,  # guhao
+            input_Ngram_ids=None,  
             Ngram_attention_mask=None,
             Ngram_token_type_ids=None,
             Ngram_position_matrix=None,
@@ -809,7 +807,6 @@ class RobertaModel(RobertaPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         embedding_output = self.embeddings(input_ids, token_type_ids)
 
-        # guhao
         Ngram_embedding_output = None
         extended_Ngram_attention_mask = None
         if self.is_Ngram:
@@ -851,8 +848,7 @@ class RobertaModel(RobertaPreTrainedModel):
         )
         if output_attentions:
             output += (encoder_output[-1],)
-        return output  # output主要三样，首先是根据output_all_encoded_layers是否输出所有层的hidden_states还是最后一层
-        # pooled_output 为 [cls] token的最后一层embedding经过一个linear层，如果output_attentions为True，则还输出attention矩阵
+        return output 
 
 
 class RobertaForPreTraining(RobertaPreTrainedModel):
