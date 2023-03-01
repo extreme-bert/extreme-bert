@@ -267,17 +267,15 @@ def _glue_convert_examples_to_features(
     label_map = {label: i for i, label in enumerate(label_list)}
 
     # amazon ['helpful', 'unhelpful'] for example
-    # label_map得到的是label到索引的字典
     def label_from_example(example: InputExample) -> Union[int, float, None]:
         if example.label is None:
             return None
-        if output_mode == "classification":  # 这里是根据example的label得到对应的索引
+        if output_mode == "classification":  
             return label_map[example.label]
         elif output_mode == "regression":
             return float(example.label)
         raise KeyError(output_mode)
 
-    # 得到的labels为所有examples的label
     labels = [label_from_example(example) for example in examples]
 
     num_tokens = 0
@@ -288,13 +286,11 @@ def _glue_convert_examples_to_features(
         if i % 10000 == 0:
             logger.info("Writing example %d of %d" % (i, len(examples)))
 
-        # 对examples[i]的text_a进行tokenizer分解，如果大于max_length-2,则取前max_length-2个token
         tokens_a = tokenizer.tokenize(examples[i].text_a)  # tokens_a is a python list
         tokens_b = None
         if len(tokens_a) > max_length - 2:
             tokens_a = tokens_a[:(max_length - 2)]
 
-        # 为tokens加上['<s>']和['</s>']
         tokens = ["<s>"] + tokens_a + ["</s>"]
         segment_ids = [0] * len(tokens)
 
@@ -304,16 +300,12 @@ def _glue_convert_examples_to_features(
         input_mask = [1] * len(input_ids)
 
         # Zero-pad up to the sequence length.
-        # input_padding为tokenizer里面的pad_token_id的id乘以最长长度减去输入的长度,zero_padding为mask，0表示mask
         input_padding = [tokenizer.pad_token_id] * (max_length - len(input_ids))
         zero_padding = [0] * (max_length - len(input_ids))
         input_ids += input_padding
         input_mask += zero_padding
         segment_ids += zero_padding
 
-        # 最后input_ids 的前面为句子的id，后面是pad的id
-        # input_mask前面句子的id部分为1，后面的pad部分为0
-        # segment_ids为全为0
         assert len(input_ids) == max_length
         assert len(input_mask) == max_length
         assert len(segment_ids) == max_length
@@ -326,8 +318,6 @@ def _glue_convert_examples_to_features(
         #  Filter the word segment from 2 to 7 to check whether there is a word
         for p in range(2, 8):
             for q in range(0, len(tokens) - p + 1):  # tokens = ['<s>',tokens_a,'</s>']
-                # 对长度为2到8进行遍历，对q从长度进行遍历，得到character_segment,然后如果它在Ngram_dict.ngram_to_id_dict里面
-                # 则在ngram_matches列表中添加n_gram的索引，开始的位置，长度，以及对应的character_segment
                 character_segment = tokens[q:q + p]
                 tmp_text = ''.join([tmp_x for tmp_x in character_segment])
                 character_segment = tmp_text.replace('Ġ', ' ').strip()
@@ -335,25 +325,21 @@ def _glue_convert_examples_to_features(
                     ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
                     ngram_matches.append([ngram_index, q, p, character_segment])
 
-        # 得到每一个seq的最多的n_gram的个数，如果大于的话，就取前最多的n_gram的个数
         max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
         if len(ngram_matches) > max_word_in_seq_proportion:
             ngram_matches = ngram_matches[:max_word_in_seq_proportion]
 
-        ngram_ids = [ngram[0] for ngram in ngram_matches]  # ngram_ids保存了第几个n_garm
-        ngram_positions = [ngram[1] for ngram in ngram_matches]  # ngram_positions保存了开始的位置
-        ngram_lengths = [ngram[2] for ngram in ngram_matches]  # ngram_lengths保存了长度
+        ngram_ids = [ngram[0] for ngram in ngram_matches] 
+        ngram_positions = [ngram[1] for ngram in ngram_matches]
+        ngram_lengths = [ngram[2] for ngram in ngram_matches]
         ngram_tuples = [ngram[3] for ngram in ngram_matches]
         ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
 
         import numpy as np
-        # ngram_mask_array 为长度为Ngram_dict长度的array，前ngram_ids为1，其他为0
         ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
         ngram_mask_array[:len(ngram_ids)] = 1
 
         # record the masked positions
-        # ngram_positions_matrix 为max_length和max_ngram_in_seq的矩阵，每一列对应一个一个N_gram
-        # 每一列，从ngram开始的位置到结束的位置为1
         ngram_positions_matrix = np.zeros(shape=(max_length, Ngram_dict.max_ngram_in_seq), dtype=np.int32)
         for j in range(len(ngram_ids)):
             ngram_positions_matrix[ngram_positions[j]:ngram_positions[j] + ngram_lengths[j], j] = 1.0
@@ -366,17 +352,17 @@ def _glue_convert_examples_to_features(
 
         # 'Ngram_tuples': ngram_tuples,
         # 'Ngram_lengths': ngram_lengths,
-        inputs = {'input_ids': input_ids,  # input_ids 的前面为句子的id，后面是pad的id
-                  'attention_mask': input_mask,  # input_mask的前面是1，后面pad的是0
+        inputs = {'input_ids': input_ids,  
+                  'attention_mask': input_mask,  
                   'token_type_ids': segment_ids,
-                  'input_Ngram_ids': ngram_ids,  # ngram_ids的前面是对应于哪一个ngram，后面是0
-                  'Ngram_attention_mask': ngram_mask_array,  # ngram_mask_array的对应有ngram_ids的位置为1，ngram_ids进行pad的位置为0
+                  'input_Ngram_ids': ngram_ids,  
+                  'Ngram_attention_mask': ngram_mask_array,
                   'Ngram_token_type_ids': ngram_seg_ids,
                   'Ngram_position_matrix': ngram_positions_matrix,
-                  }  # ngram_positions_matrix对应于[max_seq,max_ngram_in_seq]
-        #  每一列对应一个n_gram,且开始的位置到结束的位置为1
+                  }
+        
         feature = InputFeatures(**inputs, label=labels[i])
-        features.append(feature)  # 输出为features的列表，其中每一个元素为InputFeatures数据类型的数据
+        features.append(feature)  
 
     if num_unk > 0:
         print("there exists {num} [UNK] in input sentence".format(num=num_unk))
@@ -402,7 +388,6 @@ class GlueDataset(Dataset):
     ):
         self.args = args
         self.processor = glue_processors[args.task_name]()
-        # 是classification 还是 regression
         self.output_mode = glue_output_modes[args.task_name]
         if isinstance(mode, str):
             try:
@@ -672,7 +657,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         if self.args.label_names is None:
-            self.args.label_names = (["labels"])  # 存储答案的索引
+            self.args.label_names = (["labels"])
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -738,15 +723,12 @@ class Trainer:
         train_dataloader = self.get_train_dataloader()
         num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
         num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-        if self.args.max_steps > 0:  # arg.max_steps:最多经过多少次梯度更新
+        if self.args.max_steps > 0: 
             t_total = self.args.max_steps
-            # num_train_epochs 为经过多少次梯度更新除以一个epoch更新梯度的次数，一个epoch为数据集过一遍
             num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
                 self.args.max_steps % num_update_steps_per_epoch > 0
             )
         else:
-            # 如果没有指定最多经历多少次的梯度更新，则拿train_epoch的数量乘以一个epoch梯度更新的次数得到t_total
-            # 将t_total赋值给max_steps
             t_total = int(num_update_steps_per_epoch * self.args.num_train_epochs)
             num_train_epochs = self.args.num_train_epochs
             self.args.max_steps = t_total
@@ -791,8 +773,6 @@ class Trainer:
             try:
                 self.global_step = int(model_path.split("-")[-1].split(os.path.sep)[0])
                 self.total_flos = getattr(model.config, "total_flos", 0)
-                # epochs_trained为已经训练的epoch的次数
-                # step_trained_in_current_epoch为下一次epoch已经训练的step的次数
                 epochs_trained = self.global_step // num_update_steps_per_epoch
                 steps_trained_in_current_epoch = self.global_step % (num_update_steps_per_epoch)
 
@@ -832,7 +812,7 @@ class Trainer:
                     epoch_pbar.update(1)
                     continue
 
-                tr_loss += self.training_step(model, inputs)  # 每一个gpu上前向传播传播一次的loss
+                tr_loss += self.training_step(model, inputs)
                 self.total_flos += self.floating_point_ops(inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
@@ -863,7 +843,6 @@ class Trainer:
                         logging_loss_scalar = tr_loss_scalar
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
-                        # global_step 为梯度更新的次数，当除以save_steps的整数倍数时，保存一次模型
                         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
 
                         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
@@ -1044,7 +1023,6 @@ class Trainer:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)  # [batch_size个loss]
             if logits is not None:
-                # 连接起来
                 preds = logits if preds is None else nested_concat(preds, logits, dim=0)
             if labels is not None:
                 label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
@@ -1061,7 +1039,6 @@ class Trainer:
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
-            # 计算准确率，f1值
         else:
             metrics = {}
         if len(eval_losses) > 0:
@@ -1075,7 +1052,6 @@ class Trainer:
                 metrics["eval_loss"] = np.mean(eval_losses)
 
         # Prefix all keys with eval_
-        # 加上前缀
         for key in list(metrics.keys()):
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
@@ -1087,7 +1063,6 @@ class Trainer:
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         has_labels = all(inputs.get(k) is not None for k in self.args.label_names)
         inputs = self._prepare_inputs(inputs)
-        # 0.0632, -0.0430, -0.1367, -0.0357
         with torch.no_grad():
             outputs = model(**inputs)
             if has_labels:
@@ -1142,18 +1117,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_Ngram",
                         default=True,
+                        required=True,
                         help="whether to add a Ngram module or not")
     parser.add_argument("--model_name_or_path",
                         default='roberta-base',
                         type=str,
                         help="Path to pretrained model or model identifier from huggingface.co/models")
     parser.add_argument("--fasttext_model_path",
-                        default='/root/guhao/TAPT/dataset/fasttext/chemprot.npy',
+                        default=None,
                         type=str,
                         required=False,
                         help="Path to pretrained fastText model for initializing ngram embeddings")
     parser.add_argument("--Ngram_path",
-                        default='/root/guhao/TAPT/dataset/ngram/pmi_chemprot_ngram.txt',
+                        default=None,
                         type=str,
                         help="Path to Ngram path")
     parser.add_argument("--config_name",
@@ -1178,12 +1154,14 @@ def main():
                         help="Where do you want to store the pretrained models downloaded from s3")
 
     parser.add_argument("--task_name",
-                        default='chemprot',
+                        default=None,
                         type=str,
+                        required=True
                         help="The name of the task")
     parser.add_argument("--data_dir",
-                        default='/root/guhao/TAPT/dataset/glue_dataset/chemprot',
+                        default=None,
                         type=str,
+                        required=True
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--max_seq_length",
                         default=256,
@@ -1196,8 +1174,9 @@ def main():
                         help="Overwrite the cached training and evaluation sets")
 
     parser.add_argument("--output_dir",
-                        default='/root/autodl-tmp/Glue_model/chemprot/with',
+                        default=None,
                         type=str,
+                        required=True,
                         help="The output directory where the model predictions and checkpoints will be written.")
 
     parser.add_argument("--overwrite_output_dir",
