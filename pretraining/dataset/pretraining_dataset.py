@@ -99,10 +99,10 @@ class pretraining_dataset(Dataset):
             "next_sentence_labels",
         ]
         self.no_nsp = no_nsp
-        self.is_Ngram = is_Ngram  # guhao
+        self.is_Ngram = is_Ngram
         if no_nsp:
             keys.remove("next_sentence_labels")
-        if is_Ngram:  # guhao
+        if is_Ngram:
             keys.append("input_Ngram_ids")
             keys.append("Ngram_attention_mask")
             keys.append("Ngram_token_type_ids")
