@@ -329,7 +329,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         if self.args.label_names is None:
-            self.args.label_names = (["labels"])  # 存储答案的索引
+            self.args.label_names = (["labels"]) 
 
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
@@ -395,15 +395,13 @@ class Trainer:
         train_dataloader = self.get_train_dataloader()
         num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
         num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-        if self.args.max_steps > 0:  # arg.max_steps:最多经过多少次梯度更新
+        if self.args.max_steps > 0: 
             t_total = self.args.max_steps
-            # num_train_epochs 为经过多少次梯度更新除以一个epoch更新梯度的次数，一个epoch为数据集过一遍
+            
             num_train_epochs = self.args.max_steps // num_update_steps_per_epoch + int(
                 self.args.max_steps % num_update_steps_per_epoch > 0
             )
         else:
-            # 如果没有指定最多经历多少次的梯度更新，则拿train_epoch的数量乘以一个epoch梯度更新的次数得到t_total
-            # 将t_total赋值给max_steps
             t_total = int(num_update_steps_per_epoch * self.args.num_train_epochs)
             num_train_epochs = self.args.num_train_epochs
             self.args.max_steps = t_total
@@ -447,8 +445,6 @@ class Trainer:
             # set global_step to global_step of last saved checkpoint from model path
             try:
                 self.global_step = int(model_path.split("-")[-1].split(os.path.sep)[0])
-                # epochs_trained为已经训练的epoch的次数
-                # step_trained_in_current_epoch为下一次epoch已经训练的step的次数
                 epochs_trained = self.global_step // num_update_steps_per_epoch
                 steps_trained_in_current_epoch = self.global_step % (num_update_steps_per_epoch)
 
@@ -486,7 +482,7 @@ class Trainer:
                     epoch_pbar.update(1)
                     continue
 
-                tr_loss += self.training_step(model, inputs)  # 每一个gpu上前向传播传播一次的loss
+                tr_loss += self.training_step(model, inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                         # last step in epoch but step is always smaller than gradient_accumulation_steps
@@ -516,7 +512,7 @@ class Trainer:
                         logging_loss_scalar = tr_loss_scalar
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
-                        # global_step 为梯度更新的次数，当除以save_steps的整数倍数时，保存一次模型
+                        
                         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.global_step}"
 
                         output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
@@ -697,7 +693,6 @@ class Trainer:
             if loss is not None:
                 eval_losses.extend([loss] * batch_size)  # [batch_size个loss]
             if logits is not None:
-                # 连接起来
                 preds = logits if preds is None else nested_concat(preds, logits, dim=0)
             if labels is not None:
                 label_ids = labels if label_ids is None else nested_concat(label_ids, labels, dim=0)
@@ -714,7 +709,6 @@ class Trainer:
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
-            # 计算准确率，f1值
         else:
             metrics = {}
         if len(eval_losses) > 0:
@@ -728,7 +722,6 @@ class Trainer:
                 metrics["eval_loss"] = np.mean(eval_losses)
 
         # Prefix all keys with eval_
-        # 加上前缀
         for key in list(metrics.keys()):
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
@@ -985,7 +978,8 @@ def get_dataset(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_Ngram",
-                        default=False,
+                        default=True,
+                        required=True,
                         help="whether to add a Ngram module or not")
     parser.add_argument("--num_hidden_Ngram_layers",
                         default=1,
@@ -997,11 +991,11 @@ def main():
                         type=str,
                         help="Path to pretrained model or model identifier from huggingface.co/models")
     parser.add_argument("--fasttext_model_path",
-                        default='/root/guhao/TAPT/dataset/fasttext/sciie.npy',
+                        default=None,
                         type=str,
                         help="Path to pretrained fastText model for initializing ngram embeddings")
     parser.add_argument("--Ngram_path",
-                        default='/root/guhao/TAPT/dataset/ngram/pmi_sciie_ngram.txt',
+                        default=None,
                         type=str,
                         help="Path to Ngram path")
     parser.add_argument("--model_type",
@@ -1024,11 +1018,12 @@ def main():
                         required=False,
                         help="Where do you want to store the pretrained models downloaded from s3")
     parser.add_argument("--train_data_file",
-                        default='/root/guhao/TAPT/dataset/Target/sciie/train.txt',
+                        default=None,
                         type=str,
+                        required=True,
                         help="The input training data file (a text file).")
     parser.add_argument("--eval_data_file",
-                        default='/root/guhao/TAPT/dataset/Target/sciie/dev.txt',
+                        default=None,
                         type=str,
                         help="input evaluation data file to evaluate the perplexity on (a text file).")
     parser.add_argument("--line_by_line",
@@ -1056,7 +1051,7 @@ def main():
                         action='store_true',
                         help="Overwrite the cached training and evaluation sets")
     parser.add_argument("--output_dir",
-                        default='/root/autodl-tmp/PATP_without_Ngram_model/sciie',
+                        default=None,
                         type=str,
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--overwrite_output_dir",
@@ -1301,8 +1296,8 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-
-    Ngram_dict = TDNANgramDict(args.Ngram_path)
+    if args.is_Ngram:
+        Ngram_dict = TDNANgramDict(args.Ngram_path)
 
     if args.config_name:
         config = AutoConfig.from_pretrained(args.config_name, cache_dir=args.cache_dir)
