@@ -744,7 +744,7 @@ def main():
     )
 
     parser.add_argument("--Ngram_path",
-                        default=None',
+                        default=None,
                         type=str,
                         help="Path to Ngram path")
     
