@@ -105,7 +105,8 @@ if __name__ == "__main__":
         hdf5_preprocessing_cmd += f" --max_predictions_per_seq={args.max_predictions_per_seq}"
         hdf5_preprocessing_cmd += f" --masked_lm_prob={args.masked_lm_prob}"
         hdf5_preprocessing_cmd += f" --random_seed={args.seed + shard_idx}"
-        hdf5_preprocessing_cmd += f" --Ngram_path={args.Ngram_path}"
+        if args.Ngram_path is not None:
+            hdf5_preprocessing_cmd += f" --Ngram_path={args.Ngram_path}"
         hdf5_preprocessing_cmd += " --dupe_factor=1"
         hdf5_preprocessing_cmd += " --no_nsp"
 
