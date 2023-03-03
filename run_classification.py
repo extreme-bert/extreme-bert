@@ -1116,7 +1116,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_Ngram",
-                        default=True,
+                        default=False,
                         required=True,
                         help="whether to add a Ngram module or not")
     parser.add_argument("--model_name_or_path",
