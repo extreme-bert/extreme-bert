@@ -57,9 +57,9 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 from pathlib import Path
 import time
-from glue import glue_processors
+from glue_utils import glue_processors
 from sklearn.metrics import f1_score
-
+from pretraining.configs import PretrainedRobertaConfig
 
 
 class EvaluationStrategy(Enum):
@@ -184,29 +184,6 @@ class TDNANgramDict(object):
             for ngram, freq in self.ngram_to_freq_dict.items():
                 fout.write("{},{}\n".format(ngram, freq))
 
-
-class RobertaConfig(BertConfig):
-    model_type = "roberta"
-
-    def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, Ngram_size=6119, num_hidden_Ngram_layers=1,
-                 sparse_mask_prediction=True, **kwargs):
-        """Constructs RobertaConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-        self.Ngram_size = Ngram_size
-        self.num_hidden_Ngram_layers = num_hidden_Ngram_layers
-        self.sparse_mask_prediction = sparse_mask_prediction
-
-class AutoConfig:
-    def __init__(self):
-        raise EnvironmentError(
-            "AutoConfig is designed to be instantiated "
-            "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
-        )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        return RobertaConfig.from_dict(config_dict, **kwargs)
 
 
 ############################ for process of dataset #############################
@@ -1119,6 +1096,7 @@ def main():
                         default=False,
                         required=True,
                         help="whether to add a Ngram module or not")
+    
     parser.add_argument("--model_name_or_path",
                         default='roberta-base',
                         type=str,
@@ -1142,11 +1120,13 @@ def main():
                         type=str,
                         required=False,
                         help="Pretrained config name or path if not the same as model_name")
+    
     parser.add_argument("--tokenizer_name",
                         default=None,
                         type=str,
                         required=False,
                         help="Pretrained tokenizer name or path if not the same as model_name")
+    
     parser.add_argument("--cache_dir",
                         default=None,
                         type=str,
@@ -1156,12 +1136,13 @@ def main():
     parser.add_argument("--task_name",
                         default=None,
                         type=str,
-                        required=True
+                        required=True,
                         help="The name of the task")
+    
     parser.add_argument("--data_dir",
                         default=None,
                         type=str,
-                        required=True
+                        required=True,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--max_seq_length",
                         default=256,
@@ -1415,19 +1396,22 @@ def main():
         output_mode = "classification"
     except KeyError:
         raise ValueError("Task not found: %s" % (args.task_name))
+    
+    ngram_size = 0
+    if args.is_Ngram:
+        Ngram_dict = TDNANgramDict(args.Ngram_path)
+        ngram_size = len(Ngram_dict.id_to_ngram_list)
 
-    Ngram_dict = TDNANgramDict(args.Ngram_path)
-    config = AutoConfig.from_pretrained(
+    config = PretrainedRobertaConfig.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task=args.task_name,
-        Ngram_size=len(Ngram_dict.id_to_ngram_list),
+        Ngram_size=ngram_size,
         num_hidden_Ngram_layers=args.num_hidden_Ngram_layers
     )
     tokenizer = RobertaTokenizer.from_pretrained(
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
     )
-
     model = TDNARobertaForSequenceClassification.from_pretrained(
         args.model_name_or_path,
         from_tf=bool(".ckpt" in args.model_name_or_path),
