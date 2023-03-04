@@ -31,7 +31,7 @@ import math
 import re
 from typing import Callable, Iterable, Tuple
 from transformers import RobertaTokenizer
-from transformers import BertConfig, PretrainedConfig
+from transformers import BertTokenizer
 import torch
 import argparse
 from enum import Enum
@@ -42,6 +42,7 @@ import json
 import shutil
 from transformers import PreTrainedTokenizerBase, BatchEncoding
 from pretraining.TDNA import TDNARobertaForSequenceClassification
+from pretraining.modeling import BertForSequenceClassification
 from typing import Dict, NamedTuple, Any, NewType
 from transformers import PreTrainedModel
 import warnings
@@ -60,7 +61,7 @@ import time
 from glue_utils import glue_processors
 from sklearn.metrics import f1_score
 from pretraining.configs import PretrainedRobertaConfig
-
+from pretraining.configs import PretrainedBertConfig
 
 class EvaluationStrategy(Enum):
     NO = "no"
@@ -186,7 +187,7 @@ class TDNANgramDict(object):
 
 
 
-############################ for process of dataset #############################
+
 
 @dataclass(frozen=True)
 class InputFeatures:
@@ -221,14 +222,15 @@ def glue_convert_examples_to_features(
         examples: List[InputExample],
         tokenizer,
         Ngram_dict,
+        ngram_flag,
         max_length: Optional[int] = None,
         task=None,
         label_list=None,
         output_mode=None,
 ):
     return _glue_convert_examples_to_features(
-        examples, tokenizer, Ngram_dict, max_length=max_length, task=task, label_list=label_list,
-        output_mode=output_mode
+        examples, tokenizer, Ngram_dict, max_length=max_length, task=task, 
+        label_list=label_list,output_mode=output_mode,ngram_flag=ngram_flag
     )
 
 
@@ -240,6 +242,7 @@ def _glue_convert_examples_to_features(
         task=None,
         label_list=None,
         output_mode=None,
+        ngram_flag=None,
 ):
     label_map = {label: i for i, label in enumerate(label_list)}
 
@@ -268,7 +271,7 @@ def _glue_convert_examples_to_features(
         if len(tokens_a) > max_length - 2:
             tokens_a = tokens_a[:(max_length - 2)]
 
-        tokens = ["<s>"] + tokens_a + ["</s>"]
+        tokens = [tokenizer.cls_token] + tokens_a + [tokenizer.sep_token]
         segment_ids = [0] * len(tokens)
 
         input_ids = tokenizer.convert_tokens_to_ids(tokens)  # list of token id (int)
@@ -290,42 +293,47 @@ def _glue_convert_examples_to_features(
         num_tokens += len(input_ids)
 
         num_unk += input_ids.count(3)
+        
+        ngram_ids = None
+        ngram_mask_array = None
+        ngram_seg_ids = None
+        ngram_positions_matrix = None
+        if ngram_flag:
+            ngram_matches = []
+            #  Filter the word segment from 2 to 7 to check whether there is a word
+            for p in range(2, 8):
+                for q in range(0, len(tokens) - p + 1):  # tokens = ['<s>',tokens_a,'</s>']
+                    character_segment = tokens[q:q + p]
+                    tmp_text = ''.join([tmp_x for tmp_x in character_segment])
+                    character_segment = tmp_text.replace('Ġ', ' ').strip()
+                    if character_segment in Ngram_dict.ngram_to_id_dict:
+                        ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
+                        ngram_matches.append([ngram_index, q, p, character_segment])
 
-        ngram_matches = []
-        #  Filter the word segment from 2 to 7 to check whether there is a word
-        for p in range(2, 8):
-            for q in range(0, len(tokens) - p + 1):  # tokens = ['<s>',tokens_a,'</s>']
-                character_segment = tokens[q:q + p]
-                tmp_text = ''.join([tmp_x for tmp_x in character_segment])
-                character_segment = tmp_text.replace('Ġ', ' ').strip()
-                if character_segment in Ngram_dict.ngram_to_id_dict:
-                    ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
-                    ngram_matches.append([ngram_index, q, p, character_segment])
+            max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
+            if len(ngram_matches) > max_word_in_seq_proportion:
+                ngram_matches = ngram_matches[:max_word_in_seq_proportion]
 
-        max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
-        if len(ngram_matches) > max_word_in_seq_proportion:
-            ngram_matches = ngram_matches[:max_word_in_seq_proportion]
+            ngram_ids = [ngram[0] for ngram in ngram_matches] 
+            ngram_positions = [ngram[1] for ngram in ngram_matches]
+            ngram_lengths = [ngram[2] for ngram in ngram_matches]
+            ngram_tuples = [ngram[3] for ngram in ngram_matches]
+            ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
 
-        ngram_ids = [ngram[0] for ngram in ngram_matches] 
-        ngram_positions = [ngram[1] for ngram in ngram_matches]
-        ngram_lengths = [ngram[2] for ngram in ngram_matches]
-        ngram_tuples = [ngram[3] for ngram in ngram_matches]
-        ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
+            import numpy as np
+            ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
+            ngram_mask_array[:len(ngram_ids)] = 1
 
-        import numpy as np
-        ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
-        ngram_mask_array[:len(ngram_ids)] = 1
+            # record the masked positions
+            ngram_positions_matrix = np.zeros(shape=(max_length, Ngram_dict.max_ngram_in_seq), dtype=np.int32)
+            for j in range(len(ngram_ids)):
+                ngram_positions_matrix[ngram_positions[j]:ngram_positions[j] + ngram_lengths[j], j] = 1.0
 
-        # record the masked positions
-        ngram_positions_matrix = np.zeros(shape=(max_length, Ngram_dict.max_ngram_in_seq), dtype=np.int32)
-        for j in range(len(ngram_ids)):
-            ngram_positions_matrix[ngram_positions[j]:ngram_positions[j] + ngram_lengths[j], j] = 1.0
-
-        # Zero-pad up to the max word in seq length.
-        padding = [0] * (Ngram_dict.max_ngram_in_seq - len(ngram_ids))
-        ngram_ids += padding
-        ngram_lengths += padding
-        ngram_seg_ids += padding
+            # Zero-pad up to the max word in seq length.
+            padding = [0] * (Ngram_dict.max_ngram_in_seq - len(ngram_ids))
+            ngram_ids += padding
+            ngram_lengths += padding
+            ngram_seg_ids += padding
 
         # 'Ngram_tuples': ngram_tuples,
         # 'Ngram_lengths': ngram_lengths,
@@ -396,6 +404,7 @@ class GlueDataset(Dataset):
             examples,
             tokenizer,
             Ngram_dict,
+            ngram_flag=args.is_Ngram,
             max_length=args.max_seq_length,
             label_list=label_list,
             output_mode=self.output_mode,
@@ -417,7 +426,7 @@ class GlueDataset(Dataset):
         return self.label_list
 
 
-############################ for process of dataset #############################
+
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -507,7 +516,7 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-#################################################################trainer###################
+
 """
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
@@ -1085,7 +1094,7 @@ class Trainer:
             return 0
 
 
-###########################################trainer###############################
+
 def main():
     # See all possible arguments in src/transformers/args.py
     # or by passing the --help flag to this script.
@@ -1093,9 +1102,15 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_Ngram",
-                        default=False,
+                        default=0,
+                        type=int,
                         required=True,
                         help="whether to add a Ngram module or not")
+    
+    parser.add_argument("--model-type",
+                        default='roberta',
+                        required=True,
+                        help="whether to use a roberta or bert")
     
     parser.add_argument("--model_name_or_path",
                         default='roberta-base',
@@ -1397,34 +1412,59 @@ def main():
     except KeyError:
         raise ValueError("Task not found: %s" % (args.task_name))
     
-    ngram_size = 0
+    
+    Ngram_dict = TDNANgramDict(args.Ngram_path) if args.Ngram_path else None
     if args.is_Ngram:
-        Ngram_dict = TDNANgramDict(args.Ngram_path)
         ngram_size = len(Ngram_dict.id_to_ngram_list)
-
-    config = PretrainedRobertaConfig.from_pretrained(
-        args.config_name if args.config_name else args.model_name_or_path,
-        num_labels=num_labels,
-        finetuning_task=args.task_name,
-        Ngram_size=ngram_size,
-        num_hidden_Ngram_layers=args.num_hidden_Ngram_layers
-    )
-    tokenizer = RobertaTokenizer.from_pretrained(
-        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
-    )
-    model = TDNARobertaForSequenceClassification.from_pretrained(
-        args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
-        config=config,
-        args=args
-    )
+    else:
+        ngram_size = 2
+ 
+    if args.model_type == 'roberta':
+        config = PretrainedRobertaConfig.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path,
+            num_labels=num_labels,
+            finetuning_task=args.task_name,
+            Ngram_size=ngram_size,
+            num_hidden_Ngram_layers=args.num_hidden_Ngram_layers
+        )
+        print(config)
+        tokenizer = RobertaTokenizer.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+        )
+        model = TDNARobertaForSequenceClassification.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            args=args
+        )
+    else:
+        config = PretrainedBertConfig.from_pretrained(
+            args.config_name if args.config_name else args.model_name_or_path,
+            num_labels=num_labels,
+            finetuning_task=args.task_name,
+            Ngram_size=ngram_size,
+            num_hidden_Ngram_layers=args.num_hidden_Ngram_layers
+        )
+        tokenizer = BertTokenizer.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+        )
+        model = BertForSequenceClassification.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            args=args
+        )
     print(model)
     total_num = sum(p.numel() for p in model.parameters())
-    if args.is_Ngram:
-        if args.fasttext_model_path is not None:
+    if args.is_Ngram and args.fasttext_model_path is not None:
+        if args.model_type == 'roberta':
             pretrained_embedding_np = np.load(args.fasttext_model_path)
             pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
             model.roberta.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
+        else:
+            pretrained_embedding_np = np.load(args.fasttext_model_path)
+            pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
+            model.bert.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
 
     # Get datasets
     train_dataset = (
@@ -1559,8 +1599,6 @@ def main():
                     for key, value in metrics.items():
                         logger.info("  %s = %s", key, value)
                         writer.write("%s = %s\n" % (key, value))
-                        print(key)
-                        print(value)
 
     return eval_results
 
