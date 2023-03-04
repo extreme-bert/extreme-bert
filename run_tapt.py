@@ -13,8 +13,9 @@ import shutil
 from tqdm.auto import tqdm, trange
 from transformers import BertConfig, PretrainedConfig
 from dataclasses import dataclass
-from transformers import RobertaTokenizer, PreTrainedTokenizer
+from transformers import RobertaTokenizer, PreTrainedTokenizer,BertTokenizer
 from pretraining.TDNA import TDNARobertaForMaskedLM
+from pretraining.modeling import BertLMHeadModel
 from typing import List, Optional, Union
 from typing import Dict, NamedTuple, Any, NewType
 from typing import Callable, Iterable, Tuple
@@ -35,6 +36,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from transformers import PreTrainedModel
 import warnings
 import collections
+from pretraining.configs import PretrainedBertConfig,PretrainedRobertaConfig
 
 logger = logging.getLogger(__name__)
 
@@ -97,30 +99,6 @@ class TDNANgramDict(object):
             for ngram, freq in self.ngram_to_freq_dict.items():
                 fout.write("{},{}\n".format(ngram, freq))
 
-
-class RobertaConfig(BertConfig):
-    model_type = "roberta"
-
-    def __init__(self, pad_token_id=1, bos_token_id=0, eos_token_id=2, Ngram_size=6119, num_hidden_Ngram_layers=1,
-                 sparse_mask_prediction=True, **kwargs):
-        """Constructs RobertaConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-        self.Ngram_size = Ngram_size
-        self.num_hidden_Ngram_layers = num_hidden_Ngram_layers
-        self.sparse_mask_prediction = sparse_mask_prediction
-
-
-class AutoConfig:
-    def __init__(self):
-        raise EnvironmentError(
-            "AutoConfig is designed to be instantiated "
-            "using the `AutoConfig.from_pretrained(pretrained_model_name_or_path)` method."
-        )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        return RobertaConfig.from_dict(config_dict, **kwargs)
 
 
 class AdamW(Optimizer):
@@ -772,7 +750,7 @@ class DataCollatorForLanguageModeling:
     tokenizer: PreTrainedTokenizer
     mlm: bool = True
     mlm_probability: float = 0.15
-
+    flag: int = 0
     def __call__(
             self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
@@ -783,22 +761,28 @@ class DataCollatorForLanguageModeling:
                                        examples]  # attention_mask is a list of list, each list contains 128 elements
             examples_token_type_ids = [e["token_type_ids"] for e in
                                        examples]  # token_type_ids is a list of list, each list contains 128 elements
-            examples_input_Ngram_ids = [e["input_Ngram_ids"] for e in
-                                        examples]  # input_Ngram_ids is a list of list, each list contains 128 elements
-            examples_Ngram_attention_mask = [e["Ngram_attention_mask"] for e in
-                                             examples]  # Ngram_attention_mask is list of ndarray, each is size 128
-            examples_Ngram_token_type_ids = [e["Ngram_token_type_ids"] for e in
-                                             examples]  # Ngram_token_type_ids is a list of list, each list contains 128 elements
-            examples_Ngram_position_matrix = [e["Ngram_position_matrix"] for e in
-                                              examples]  # Ngram_position_matrix is a list of ndarray, each is (128, 128)
+            examples_input_Ngram_ids = None
+            examples_Ngram_attention_mask = None
+            examples_Ngram_token_type_ids = None
+            examples_Ngram_position_matrix = None
+            if examples[0]["input_Ngram_ids"] is not None:
+                examples_input_Ngram_ids = [e["input_Ngram_ids"] for e in
+                                            examples]  # input_Ngram_ids is a list of list, each list contains 128 elements
+                examples_Ngram_attention_mask = [e["Ngram_attention_mask"] for e in
+                                                examples]  # Ngram_attention_mask is list of ndarray, each is size 128
+                examples_Ngram_token_type_ids = [e["Ngram_token_type_ids"] for e in
+                                                examples]  # Ngram_token_type_ids is a list of list, each list contains 128 elements
+                examples_Ngram_position_matrix = [e["Ngram_position_matrix"] for e in
+                                                examples]  # Ngram_position_matrix is a list of ndarray, each is (128, 128)
 
         batch = self._tensorize_batch(examples_id)  # torch.LongTensor [8,128]
         examples_attention_mask = self._tensorize_batch(examples_attention_mask)  # torch.LongTensor [8,128]
         examples_token_type_ids = self._tensorize_batch(examples_token_type_ids)  # torch.LongTensor [8,128]
-        examples_input_Ngram_ids = self._tensorize_batch(examples_input_Ngram_ids)  # torch.LongTensor [8,128]
-        examples_Ngram_attention_mask = torch.tensor(examples_Ngram_attention_mask)
-        examples_Ngram_token_type_ids = self._tensorize_batch(examples_Ngram_token_type_ids)
-        examples_Ngram_position_matrix = torch.tensor(examples_Ngram_position_matrix)
+        if examples_input_Ngram_ids is not None:
+            examples_input_Ngram_ids = self._tensorize_batch(examples_input_Ngram_ids)  # torch.LongTensor [8,128]
+            examples_Ngram_attention_mask = torch.tensor(examples_Ngram_attention_mask)
+            examples_Ngram_token_type_ids = self._tensorize_batch(examples_Ngram_token_type_ids)
+            examples_Ngram_position_matrix = torch.tensor(examples_Ngram_position_matrix)
         if self.mlm:
             inputs, labels = self.mask_tokens(batch)
             return [None, inputs, examples_attention_mask, examples_token_type_ids, labels, examples_input_Ngram_ids,
@@ -865,8 +849,8 @@ class DataCollatorForLanguageModeling:
 
 class LineByLineTextDataset(Dataset):
 
-    def __init__(self, tokenizer: PreTrainedTokenizer, Ngram_dict, file_path: str):
-        max_length = 256  # add by @shizhe
+    def __init__(self, tokenizer: PreTrainedTokenizer, Ngram_dict, file_path: str,flag):
+        max_length = 256  
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
@@ -889,7 +873,7 @@ class LineByLineTextDataset(Dataset):
                 tokens_a = tokens_a[:(max_length - 2)]
 
             # tokens = ["[CLS]"] + tokens_a + ["[SEP]"]
-            tokens = ["<s>"] + tokens_a + ["</s>"]
+            tokens = [tokenizer.cls_token] + tokens_a + [tokenizer.sep_token]
 
             segment_ids = [0] * len(tokens)
 
@@ -909,41 +893,46 @@ class LineByLineTextDataset(Dataset):
             assert len(input_ids) == max_length
             assert len(input_mask) == max_length
             assert len(segment_ids) == max_length
+            
+            ngram_ids = None
+            ngram_mask_array = None
+            ngram_seg_ids = None
+            ngram_positions_matrix = None
+            if flag:
+                ngram_matches = []
+                #  Filter the word segment from 2 to 7 to check whether there is a word
+                for p in range(2, 8):
+                    for q in range(0, len(tokens) - p + 1):
+                        character_segment = tokens[q:q + p]
+                        tmp_text = ''.join([tmp_x for tmp_x in character_segment])
+                        character_segment = tmp_text.replace('Ġ', ' ').strip()
+                        if character_segment in Ngram_dict.ngram_to_id_dict:
+                            ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
+                            ngram_matches.append([ngram_index, q, p, character_segment])
 
-            ngram_matches = []
-            #  Filter the word segment from 2 to 7 to check whether there is a word
-            for p in range(2, 8):
-                for q in range(0, len(tokens) - p + 1):
-                    character_segment = tokens[q:q + p]
-                    tmp_text = ''.join([tmp_x for tmp_x in character_segment])
-                    character_segment = tmp_text.replace('Ġ', ' ').strip()
-                    if character_segment in Ngram_dict.ngram_to_id_dict:
-                        ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
-                        ngram_matches.append([ngram_index, q, p, character_segment])
+                max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
+                if len(ngram_matches) > max_word_in_seq_proportion:
+                    ngram_matches = ngram_matches[:max_word_in_seq_proportion]
+                ngram_ids = [ngram[0] for ngram in ngram_matches]
+                ngram_positions = [ngram[1] for ngram in ngram_matches]
+                ngram_lengths = [ngram[2] for ngram in ngram_matches]
+                ngram_tuples = [ngram[3] for ngram in ngram_matches]
+                ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
 
-            max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
-            if len(ngram_matches) > max_word_in_seq_proportion:
-                ngram_matches = ngram_matches[:max_word_in_seq_proportion]
-            ngram_ids = [ngram[0] for ngram in ngram_matches]
-            ngram_positions = [ngram[1] for ngram in ngram_matches]
-            ngram_lengths = [ngram[2] for ngram in ngram_matches]
-            ngram_tuples = [ngram[3] for ngram in ngram_matches]
-            ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
+                import numpy as np
+                ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq, dtype=np.bool)
+                ngram_mask_array[:len(ngram_ids)] = 1
 
-            import numpy as np
-            ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq, dtype=np.bool)
-            ngram_mask_array[:len(ngram_ids)] = 1
+                # record the masked positions
+                ngram_positions_matrix = np.zeros(shape=(max_length, Ngram_dict.max_ngram_in_seq), dtype=np.int32)
+                for j in range(len(ngram_ids)):
+                    ngram_positions_matrix[ngram_positions[j]:ngram_positions[j] + ngram_lengths[j], j] = 1.0
 
-            # record the masked positions
-            ngram_positions_matrix = np.zeros(shape=(max_length, Ngram_dict.max_ngram_in_seq), dtype=np.int32)
-            for j in range(len(ngram_ids)):
-                ngram_positions_matrix[ngram_positions[j]:ngram_positions[j] + ngram_lengths[j], j] = 1.0
-
-            # Zero-pad up to the max word in seq length.
-            padding = [0] * (Ngram_dict.max_ngram_in_seq - len(ngram_ids))
-            ngram_ids += padding
-            ngram_lengths += padding
-            ngram_seg_ids += padding
+                # Zero-pad up to the max word in seq length.
+                padding = [0] * (Ngram_dict.max_ngram_in_seq - len(ngram_ids))
+                ngram_ids += padding
+                ngram_lengths += padding
+                ngram_seg_ids += padding
 
             # 'Ngram_tuples': ngram_tuples,
             # 'Ngram_lengths': ngram_lengths,
@@ -972,13 +961,14 @@ def get_dataset(
         cache_dir=None,
 ):
     file_path = args.eval_data_file if evaluate else args.train_data_file
-    return LineByLineTextDataset(tokenizer=tokenizer, Ngram_dict=Ngram_dict, file_path=file_path)
+    return LineByLineTextDataset(tokenizer=tokenizer, Ngram_dict=Ngram_dict, file_path=file_path,flag=args.is_Ngram)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--is_Ngram",
-                        default=True,
+                        default=0,
+                        type=int,
                         required=True,
                         help="whether to add a Ngram module or not")
     parser.add_argument("--num_hidden_Ngram_layers",
@@ -1296,34 +1286,49 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
+    
+    Ngram_dict = TDNANgramDict(args.Ngram_path) if args.Ngram_path else None
     if args.is_Ngram:
-        Ngram_dict = TDNANgramDict(args.Ngram_path)
-
-    if args.config_name:
-        config = AutoConfig.from_pretrained(args.config_name, cache_dir=args.cache_dir)
-    elif args.model_name_or_path:
-        config = AutoConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir,
-                                            Ngram_size=len(Ngram_dict.id_to_ngram_list),
-                                            num_hidden_Ngram_layers=args.num_hidden_Ngram_layers)
-
-    if args.tokenizer_name:
-        tokenizer = RobertaTokenizer.from_pretrained(args.tokenizer_name, cache_dir=args.cache_dir)
-    elif args.model_name_or_path:
-        tokenizer = RobertaTokenizer.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir,
-                                                     Ngram_vocab_size=len(Ngram_dict.id_to_ngram_list))
+        ngram_size = len(Ngram_dict.id_to_ngram_list)
     else:
-        raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported, but you can do it from another script, save it,"
-            "and load it from here, using --tokenizer_name"
+        ngram_size = 2
+    
+    if args.model_type == 'roberta':
+        config = PretrainedRobertaConfig.from_pretrained(
+                    args.config_name if args.config_name else args.model_name_or_path,
+                    cache_dir=args.cache_dir,
+                    Ngram_size=ngram_size,
+                    num_hidden_Ngram_layers=args.num_hidden_Ngram_layers)
+
+        tokenizer = RobertaTokenizer.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
+        )
+        
+        model = TDNARobertaForMaskedLM.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir,
+            args=args
+        )
+    else:
+        config = PretrainedBertConfig.from_pretrained(
+                    args.config_name if args.config_name else args.model_name_or_path,
+                    cache_dir=args.cache_dir,
+                    Ngram_size=ngram_size,
+                    num_hidden_Ngram_layers=args.num_hidden_Ngram_layers)
+
+        tokenizer = BertTokenizer.from_pretrained(
+            args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         )
 
-    model = TDNARobertaForMaskedLM.from_pretrained(
-        args.model_name_or_path,
-        from_tf=bool(".ckpt" in args.model_name_or_path),
-        config=config,
-        cache_dir=args.cache_dir,
-        args=args
-    )
+        model = BertLMHeadModel.from_pretrained(
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
+            cache_dir=args.cache_dir,
+            args=args
+        )
     print(model)
     if config.model_type in ["bert", "roberta", "distilbert", "camembert"] and not args.mlm:
         raise ValueError(
@@ -1331,11 +1336,15 @@ def main():
             "--mlm flag (masked language modeling)."
         )
 
-    if args.is_Ngram:
-        if args.fasttext_model_path is not None:
+    if args.is_Ngram and args.fasttext_model_path is not None:
+        if args.model_type == 'roberta':
             pretrained_embedding_np = np.load(args.fasttext_model_path)
             pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
             model.roberta.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
+        else:
+            pretrained_embedding_np = np.load(args.fasttext_model_path)
+            pretrained_embedding = torch.from_numpy(pretrained_embedding_np)
+            model.bert.Ngram_embeddings.word_embeddings.weight.data.copy_(pretrained_embedding)
 
     # Get datasets
 
@@ -1348,7 +1357,7 @@ def main():
         else None
     )
     data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm=args.mlm, mlm_probability=args.mlm_probability
+        tokenizer=tokenizer, mlm=args.mlm, mlm_probability=args.mlm_probability,flag = args.is_Ngram
     )
 
     # Initialize our Trainer
