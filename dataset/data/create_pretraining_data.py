@@ -749,8 +749,6 @@ def main():
                         help="Path to Ngram path")
     
 
-    args = parser.parse_args()
-    
     
     args = parser.parse_args()
     args.Ngram_flag = False
