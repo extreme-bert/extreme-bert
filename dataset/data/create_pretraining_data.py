@@ -751,6 +751,8 @@ def main():
 
     args = parser.parse_args()
     
+    
+    args = parser.parse_args()
     args.Ngram_flag = False
     Ngram_dict = None
     if args.Ngram_path is not None:
