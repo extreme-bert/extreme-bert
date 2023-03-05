@@ -75,11 +75,11 @@ Pretraining script: `run_pretraining.py`
 
 For all possible pretraining arguments see: `python run_pretraining.py -h`
 
-##### Example for training with the best configuration presented in our paper (24-layers/1024H/time-based learning rate schedule/fp16):
+Example for training (24-layers/1024H/time-based learning rate schedule):
 
 ```bash
 deepspeed run_pretraining.py \
-  --model_type bert-mlm --tokenizer_name bert-large-uncased \
+  --model_type bert-mlm \ --tokenizer_name bert-large-uncased \
   --hidden_act gelu \
   --hidden_size 1024 \
   --num_hidden_layers 24 \
@@ -103,7 +103,7 @@ deepspeed run_pretraining.py \
   --total_training_time 24.0 \
   --early_exit_time_marker 24.0 \
   --dataset_path <dataset path> \
-  --output_dir /tmp/training-out \
+  --output_dir <output path> \
   --print_steps 100 \
   --num_epochs_between_checkpoints 10000 \
   --job_name pretraining_experiment \
@@ -122,52 +122,238 @@ deepspeed run_pretraining.py \
   --early_stop_eval_loss 6 \
   --seed 42 \
   --fp16
-  --is_Ngram 1
-  --Ngram_path <ngram path>
+```
+
+Also if you want to pretrain the bert module with the ngram_attention_module, you can add the ngram argument as follows:
+
+```bash
+deepspeed run_pretraining.py \
+  --model_type bert-mlm \
+  --tokenizer_name bert-large-uncased \
+  --hidden_act gelu \
+  --hidden_size 1024 \
+  --num_hidden_layers 24 \
+  --num_attention_heads 16 \
+  --intermediate_size 4096 \
+  --hidden_dropout_prob 0.1 \
+  --attention_probs_dropout_prob 0.1 \
+  --encoder_ln_mode pre-ln \
+  --lr 1e-3 \
+  --train_batch_size 4096 \
+  --train_micro_batch_size_per_gpu 32 \
+  --lr_schedule time \
+  --curve linear \
+  --warmup_proportion 0.06 \
+  --gradient_clipping 0.0 \
+  --optimizer_type adamw \
+  --weight_decay 0.01 \
+  --adam_beta1 0.9 \
+  --adam_beta2 0.98 \
+  --adam_eps 1e-6 \
+  --total_training_time 24.0 \
+  --early_exit_time_marker 24.0 \
+  --dataset_path <dataset path> \
+  --output_dir <output path> \
+  --print_steps 100 \
+  --num_epochs_between_checkpoints 10000 \
+  --job_name pretraining_experiment \
+  --project_name budget-bert-pretraining \
+  --validation_epochs 3 \
+  --validation_epochs_begin 1 \
+  --validation_epochs_end 1 \
+  --validation_begin_proportion 0.05 \
+  --validation_end_proportion 0.01 \
+  --validation_micro_batch 16 \
+  --deepspeed \
+  --data_loader_type dist \
+  --do_validation \
+  --use_early_stopping \
+  --early_stop_time 180 \
+  --early_stop_eval_loss 6 \
+  --seed 42 \
+  --fp16 \
+  --is_Ngram 1 \
+  --Ngram_path <ngram path> \
   --fasttext_model_path <fasttext_model_path>
 ```
+pay attention to the fact that the embedding dimension of the bert which means `hidden_size` should be the same with the fasttext initialization dimension if you want to use fasttext to initialize.
+
+Also you can pretraining the roberta model by running the following command:
+
+```bash
+deepspeed run_pretraining.py \
+  --model_type roberta-mlm-TDNA \
+  --tokenizer_name roberta-base \
+  --hidden_act gelu \
+  --hidden_size 768 \
+  --vocab_size 50265 \
+  --num_hidden_layers 12 \
+  --num_attention_heads 12 \
+  --intermediate_size 3072 \
+  --hidden_dropout_prob 0.1 \
+  --attention_probs_dropout_prob 0.1 \
+  --lr 1e-3 \
+  --train_batch_size 4096 \
+  --train_micro_batch_size_per_gpu 32 \
+  --lr_schedule time \
+  --curve linear \
+  --warmup_proportion 0.06 \
+  --gradient_clipping 0.0 \
+  --optimizer_type adamw \
+  --weight_decay 0.01 \
+  --adam_beta1 0.9 \
+  --adam_beta2 0.98 \
+  --adam_eps 1e-6 \
+  --total_training_time 24.0 \
+  --early_exit_time_marker 24.0 \
+  --dataset_path <dataset path> \
+  --output_dir <output path> \
+  --print_steps 100 \
+  --num_epochs_between_checkpoints 10000 \
+  --job_name pretraining_experiment \
+  --project_name budget-roberta-pretraining \
+  --validation_epochs 3 \
+  --validation_epochs_begin 1 \
+  --validation_epochs_end 1 \
+  --validation_begin_proportion 0.05 \
+  --validation_end_proportion 0.01 \
+  --validation_micro_batch 16 \
+  --deepspeed \
+  --data_loader_type dist \
+  --do_validation \
+  --use_early_stopping \
+  --early_stop_time 180 \
+  --early_stop_eval_loss 6 \
+  --seed 42 \
+  --fp16 \
+  --is_Ngram 1 \
+  --Ngram_path <ngram path> \
+  --fasttext_model_path <fasttext_model_path>
+```
+Please note that the vocab_size should be the same with the vocab_size of the tokenizer that we use in the data processing period. We can use the pretrained model at the output_dir
 
 ## Finetuning
 
-Use `run_glue.py` to run finetuning for a saved checkpoint on GLUE tasks. 
+We can use the model from huggingface library or the model from the pretrained model, then we fine tune the model on the target dataset.
 
-The finetuning script is identical to the one provided by Huggingface with the addition of our model.
+Example for fine tune a roberta for glue dataset.
 
-For all possible pretraining arguments see: `python run_glue.py -h`
-
-##### Example for finetuning on MRPC:
-
-```bash
-python run_glue.py \
-  --model_name_or_path <path to model> \
-  --task_name MRPC \
-  --max_seq_length 128 \
-  --output_dir /tmp/finetuning \
-  --overwrite_output_dir \
-  --do_train --do_eval \
-  --evaluation_strategy steps \
-  --per_device_train_batch_size 32 --gradient_accumulation_steps 1 \
-  --per_device_eval_batch_size 32 \
-  --learning_rate 5e-5 \
-  --weight_decay 0.01 \
-  --eval_steps 50 --evaluation_strategy steps \
-  --max_grad_norm 1.0 \
-  --num_train_epochs 5 \
-  --lr_scheduler_type polynomial \
-  --warmup_steps 50
-```
-You can test your pretrained model or use the huggingface pretrained model by `run_classification.py`
 ```bash
 python run_classification.py \
-   --model_name_or_path <path to model> or huggingface model
-   --fasttext_model_path <path to fasttext model>
-   --is_Ngram 1
-   --Ngram_path <path to ngram path>
-   --task_name <task_name amazon to example>
-   --data_dir <path to your dataset>
-   --output_dir <path to output dir>
-   --num_train_epochs 3
-'''
+    --is_Ngram 0 \
+    --model-type roberta \
+    --model_name_or_path roberta-base or <pretrained model dir>\
+    --task_name <task name>  \
+    --max_seq_length 256 \
+    --per_device_train_batch_size 16 \
+    --learning_rate 4e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir <output dir of fine-tuned model> \
+    --data_dir <data dir of the task> 
+```
+If you want to fine tune with the ngram module, just set the `is_Ngram` 1, and provide a Ngram_path.
+
+```bash
+python run_classification.py \
+    --is_Ngram 1 \
+    --model-type roberta \
+    --model_name_or_path roberta-base or <pretrained model dir>\
+    --task_name <task name>  \
+    --max_seq_length 256 \
+    --per_device_train_batch_size 16 \
+    --learning_rate 4e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir <output dir of fine-tuned model> \
+    --data_dir <data dir of the task> \
+    --Ngram_path <ngram dir> \
+    --fasttext_model_path <fasttext dir>
+```
+The fine tuned model was stored at output_dir.
+
+The same is the bert model,If you want to fine tune a bert model for the glue dataset, you can run the following command.
+
+```bash
+python run_classification.py \
+    --is_Ngram 0 \
+    --model-type bert \
+    --model_name_or_path bert-base-uncased or <pretrained model dir>\
+    --task_name <task name>  \
+    --max_seq_length 256 \
+    --per_device_train_batch_size 16 \
+    --learning_rate 4e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir <output dir of fine-tuned model> \
+    --data_dir <data dir of the task> 
+```
+If you want fine tune the bert with ngram module:
+
+```bash
+python run_classification.py \
+    --is_Ngram 1 \
+    --model-type bert \
+    --model_name_or_path bert-base-uncased or <pretrained model dir>\
+    --task_name <task name>  \
+    --max_seq_length 256 \
+    --per_device_train_batch_size 16 \
+    --learning_rate 4e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir <output dir of fine-tuned model> \
+    --data_dir <data dir of the task> \
+    --Ngram_path <ngram dir> \
+    --fasttext_model_path <fasttext dir>
+```
+
+## TAPT
+Following the [Don't Stop Pretraining ACL 2020 paper](https://github.com/allenai/dont-stop-pretraining), we can get a better performance by doing task adaptive pretraining.
+If you want to pretrain a roberta model further on the task domain dataset with ngram module, you can run the following command.
+
+```bash
+python run_tapt.py  \
+    --is_Ngram 1  \
+    --model_name_or_path roberta-base \ --model_type roberta  \
+    --fasttext_model_path  <fasttext dir>\
+    --Ngram_path <ngram dir> \
+    --train_data_file <train_data set> \
+    --eval_data_file <eval_data set> \
+    --output_dir <output dir of TAPT model> \
+    --num_train_epochs 3
+```
+Also, extreme-bert allow you to pretrain a bert model too:
+
+```bash
+python run_tapt.py  \
+    --is_Ngram 1  \
+    --model_name_or_path bert-base-uncased \ --model_type bert  \
+    --fasttext_model_path  <fasttext dir>\
+    --Ngram_path <ngram dir> \
+    --train_data_file <train_data set> \
+    --eval_data_file <eval_data set> \
+    --output_dir <output dir of TAPT model> \
+    --num_train_epochs 3
+```
+If you want to pretrain a roberta model without ngram module, just set the `is_Ngram` to 0.
+
+```bash
+python run_tapt.py  \
+    --is_Ngram 0  \
+    --model_name_or_path roberta-base \ --model_type roberta  \
+    --train_data_file <train_data set> \
+    --eval_data_file <eval_data set> \
+    --output_dir <output dir of TAPT model> \
+    --num_train_epochs 3
+```
+The same is the bert model without ngram module.
+
+```bash
+python run_tapt.py  \
+    --is_Ngram 0  \
+    --model_name_or_path bert-base-uncased \ --model_type bert  \
+    --train_data_file <train_data set> \
+    --eval_data_file <eval_data set> \
+    --output_dir <output dir of TAPT model> \
+    --num_train_epochs 3
+```
+
 ## Citation
 If you find this repository useful, you may cite [our paper](https://arxiv.org/abs/2211.17201) as:  
 ```
