@@ -261,9 +261,10 @@ class BertEmbeddings(nn.Module):
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
-
-        self.layernorm_embedding = config.layernorm_embedding
-        if config.layernorm_embedding:
+        self.layernorm_embedding = False
+        if hasattr(config, "config.layernorm_embedding"):
+            self.layernorm_embedding = config.layernorm_embedding
+        if self.layernorm_embedding:
             BertLayerNorm = get_layer_norm_type(config)
             self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
 
@@ -285,6 +286,30 @@ class BertEmbeddings(nn.Module):
         if self.layernorm_embedding:
             embeddings = self.LayerNorm(embeddings)
 
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
+class bertNgramEmbeddings(nn.Module):
+    """Construct the embeddings from ngram, position and token_type embeddings.
+    """
+
+    def __init__(self, config):
+        super(bertNgramEmbeddings, self).__init__()
+        self.word_embeddings = nn.Embedding(config.Ngram_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, input_ids, token_type_ids=None):
+        if token_type_ids is None:
+            token_type_ids = torch.zeros_like(input_ids)
+
+        words_embeddings = self.word_embeddings(input_ids)
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+
+        embeddings = words_embeddings + token_type_embeddings
+        embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -474,8 +499,11 @@ class BertEncoder(nn.Module):
         BertLayerNorm = get_layer_norm_type(config)
         self.FinalLayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
         self.is_transformer_kernel = (
-            hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel
+                hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel
         )
+
+        self.num_hidden_Ngram_layers = config.num_hidden_Ngram_layers 
+        self.is_Ngram = args.is_Ngram  
 
         if hasattr(args, "deepspeed_transformer_kernel") and args.deepspeed_transformer_kernel:
             from deepspeed import DeepSpeedTransformerConfig, DeepSpeedTransformerLayer
@@ -516,6 +544,10 @@ class BertEncoder(nn.Module):
                 [copy.deepcopy(layer) for _ in range(self.config.num_hidden_layers)]
             )
 
+        if self.is_Ngram:
+            self.Ngram_layer = nn.ModuleList([BertLayer(config) for _ in range(self.num_hidden_Ngram_layers)])
+     
+
     def add_attention(self, all_attentions, attention_probs):
         if attention_probs is not None:
             all_attentions.append(attention_probs)
@@ -523,12 +555,15 @@ class BertEncoder(nn.Module):
         return all_attentions
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        output_all_encoded_layers=True,
-        checkpoint_activations=False,
-        output_attentions=False,
+            self,
+            hidden_states,
+            attention_mask,
+            Ngram_hidden_states=None,  
+            Ngram_position_matrix=None,  
+            Ngram_attention_mask=None,
+            output_all_encoded_layers=True,
+            checkpoint_activations=False,
+            output_attentions=False,
     ):
         all_encoder_layers = []
         all_attentions = []
@@ -554,7 +589,7 @@ class BertEncoder(nn.Module):
                 l += chunk_length
             # decoder layers
         else:
-            for layer_module in self.layer:
+            for i, layer_module in enumerate(self.layer):
                 if self.is_transformer_kernel:
                     # using Deepspeed Transformer kernel
                     hidden_states = layer_module(hidden_states, attention_mask)
@@ -567,6 +602,15 @@ class BertEncoder(nn.Module):
                     # get all attention_probs from layers
                     if output_attentions:
                         all_attentions = self.add_attention(all_attentions, attention_probs)
+               
+                if self.is_Ngram:
+                    if i < self.num_hidden_Ngram_layers:
+                        # [batch_size,max_len_seq,hidden_size]
+                        Ngram_hidden_states = self.Ngram_layer[i](Ngram_hidden_states, Ngram_attention_mask)[0]
+                        # [batch_size,max_seq,max_len_seq]
+                        Ngram_states = torch.bmm(Ngram_position_matrix.float(), Ngram_hidden_states.float())
+                        hidden_states += Ngram_states
+
 
                 if output_all_encoded_layers:
                     all_encoder_layers.append(hidden_states)
@@ -579,7 +623,7 @@ class BertEncoder(nn.Module):
         outputs = (all_encoder_layers,)
         if output_attentions:
             outputs += (all_attentions,)
-        return outputs
+        return outputs  
 
 
 class BertPooler(nn.Module):
@@ -725,6 +769,14 @@ class BertModel(BertPreTrainedModel):
             selected in [0, 1]. It's a mask to be used if the input sequence length is smaller than the max
             input sequence length in the current batch. It's the mask that we typically use for attention when
             a batch has varying length sentences.
+        'input_Ngram_ids': an optional torch.LongTensor of shape [batch_size,max_ngram_per_seq]
+            with each correspond a Ngram, 0 corresponds to the padded Ngram
+        'Ngram_attention_mask' an optional torch.LongTensor of shape [batch_size,max_ngram_per_seq] with indices
+            selected in [0,1]
+        'Ngram_token_type_ids' an optional torch.LongTensor of shape [batch_size,max_ngram_per_seq] with indices
+            selected in [0,1], Type 0 corresponds to a sentence A
+        'Ngram_position_matrix' an optional torch.LongTensor of shape [batch_size,sequence_mask,max_ngram_per_seq]
+            which describe the relationship between the Ngram and tokens.
         `output_all_encoded_layers`: boolean which controls the content of the `encoded_layers` output as described below. Default: `True`.
 
     Outputs: Tuple of (encoded_layers, pooled_output)
@@ -757,6 +809,9 @@ class BertModel(BertPreTrainedModel):
         super(BertModel, self).__init__(config)
         self.embeddings = BertEmbeddings(config)
         # set pad_token_id that is used for sparse attention padding
+        self.is_Ngram = args.is_Ngram
+        if self.is_Ngram:
+            self.Ngram_embeddings = bertNgramEmbeddings(config)
         self.pad_token_id = (
             config.pad_token_id
             if hasattr(config, "pad_token_id") and config.pad_token_id is not None
@@ -768,13 +823,17 @@ class BertModel(BertPreTrainedModel):
         logger.info("Init BERT pretrain model")
 
     def forward(
-        self,
-        input_ids,
-        token_type_ids=None,
-        attention_mask=None,
-        output_all_encoded_layers=True,
-        checkpoint_activations=False,
-        output_attentions=False,
+            self,
+            input_ids,
+            token_type_ids=None,
+            attention_mask=None,
+            input_Ngram_ids=None, 
+            Ngram_attention_mask=None,
+            Ngram_token_type_ids=None,
+            Ngram_position_matrix=None,
+            output_all_encoded_layers=True,
+            checkpoint_activations=False,
+            output_attentions=False,
     ):
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -786,8 +845,8 @@ class BertModel(BertPreTrainedModel):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
+        extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
@@ -798,16 +857,36 @@ class BertModel(BertPreTrainedModel):
             dtype=self.embeddings.word_embeddings.weight.dtype  # should be of same dtype
         )  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-
         embedding_output = self.embeddings(input_ids, token_type_ids)
 
+        Ngram_embedding_output = None
+        extended_Ngram_attention_mask = None
+        if self.is_Ngram:
+            if Ngram_attention_mask is None:
+                Ngram_attention_mask = torch.ones_like(input_Ngram_ids)
+            if Ngram_token_type_ids is None:
+                Ngram_token_type_ids = torch.zeros_like(input_Ngram_ids)
+
+            extended_Ngram_attention_mask = Ngram_attention_mask.unsqueeze(1).unsqueeze(2)
+
+            extended_Ngram_attention_mask = extended_Ngram_attention_mask.to(
+                dtype=self.Ngram_embeddings.word_embeddings.weight.dtype
+            )
+            extended_Ngram_attention_mask = (1.0 - extended_Ngram_attention_mask) * -10000.0
+
+            Ngram_embedding_output = self.Ngram_embeddings(input_Ngram_ids, Ngram_token_type_ids)
+
         encoder_output = self.encoder(
-            embedding_output,
-            extended_attention_mask,
+            hidden_states=embedding_output,
+            attention_mask=extended_attention_mask,
+            Ngram_hidden_states=Ngram_embedding_output,
+            Ngram_position_matrix=Ngram_position_matrix,
+            Ngram_attention_mask=extended_Ngram_attention_mask,
             output_all_encoded_layers=output_all_encoded_layers,
             checkpoint_activations=checkpoint_activations,
             output_attentions=output_attentions,
         )
+
         encoded_layers = encoder_output[0]
         sequence_output = encoded_layers[-1]
 
@@ -821,7 +900,7 @@ class BertModel(BertPreTrainedModel):
         )
         if output_attentions:
             output += (encoder_output[-1],)
-        return output
+        return output  
 
 
 class BertForPreTraining(BertPreTrainedModel):
@@ -879,7 +958,7 @@ class BertForPreTraining(BertPreTrainedModel):
         super(BertForPreTraining, self).__init__(config)
         self.bert = BertModel(config, args)
         self.cls = BertPreTrainingHeads(config, self.bert.embeddings.word_embeddings.weight)
-        self.apply(self.init_bert_weights)
+        self._init_weights(self.bert)
 
     def forward(self, batch):
         input_ids = batch[1]
@@ -940,6 +1019,14 @@ class BertLMHeadModel(BertPreTrainedModel):
         `masked_lm_labels`: masked language modeling labels: torch.LongTensor of shape [batch_size, sequence_length]
             with indices selected in [-1, 0, ..., vocab_size]. All labels set to -1 are ignored (masked), the loss
             is only computed for the labels set in [0, ..., vocab_size]
+        'input_Ngram_ids': an optional torch.LongTensor of shape [batch_size,max_ngram_per_seq]
+            with each correspond a Ngram, 0 corresponds to the padded Ngram
+        'Ngram_attention_mask' an optional torch.LongTensor of shape [batch_size,max_ngram_per_seq] with indices
+            selected in [0,1]
+        'Ngram_token_type_ids' an optional torch.LongTensor of shape [batch_size,max_ngram_per_seq] with indices
+            selected in [0,1], Type 0 corresponds to a sentence A
+        'Ngram_position_matrix' an optional torch.LongTensor of shape [batch_size,sequence_mask,max_ngram_per_seq]
+            which describe the relationship between the Ngram and tokens.
 
     Outputs:
         if `masked_lm_labels` is  not `None`:
@@ -964,24 +1051,39 @@ class BertLMHeadModel(BertPreTrainedModel):
     def __init__(self, config, args):
         super(BertLMHeadModel, self).__init__(config)
         self.bert = BertModel(config, args)
-
+        self.is_Ngram = args.is_Ngram
         self.cls = BertOnlyMLMHead(config, self.bert.embeddings.word_embeddings.weight)
-        self.init_weights()
+        self._init_weights(self.bert)
 
     def forward(self, batch, output_attentions=False):
         input_ids = batch[1]
         token_type_ids = batch[3]
         attention_mask = batch[2]
         masked_lm_labels = batch[4]
+        input_Ngram_ids = None
+        Ngram_attention_mask = None
+        Ngram_token_type_ids = None
+        Ngram_position_matrix = None
+        if self.is_Ngram:
+            input_Ngram_ids = batch[5]
+            Ngram_attention_mask = batch[6]
+            Ngram_token_type_ids = batch[7]
+            Ngram_position_matrix = batch[8]
+
         checkpoint_activations = False
 
         bert_output = self.bert(
-            input_ids,
-            token_type_ids,
-            attention_mask,
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            input_Ngram_ids=input_Ngram_ids,
+            Ngram_attention_mask=Ngram_attention_mask,
+            Ngram_token_type_ids=Ngram_token_type_ids,
+            Ngram_position_matrix=Ngram_position_matrix,
             output_all_encoded_layers=False,
             checkpoint_activations=checkpoint_activations,
         )
+
         sequence_output = bert_output[0]
 
         if masked_lm_labels is None:
@@ -1054,15 +1156,15 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         super(BertForNextSentencePrediction, self).__init__(config)
         self.bert = BertModel(config)
         self.cls = BertOnlyNSPHead(config)
-        self.apply(self.init_bert_weights)
+        self._init_weights(self.bert)
 
     def forward(
-        self,
-        input_ids,
-        token_type_ids=None,
-        attention_mask=None,
-        next_sentence_label=None,
-        checkpoint_activations=False,
+            self,
+            input_ids,
+            token_type_ids=None,
+            attention_mask=None,
+            next_sentence_label=None,
+            checkpoint_activations=False,
     ):
         _, pooled_output = self.bert(
             input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False
@@ -1130,24 +1232,37 @@ class BertForSequenceClassification(BertPreTrainedModel):
         self.num_labels = config.num_labels
         self.bert = BertModel(config, args)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
+        self.is_Ngram = args.is_Ngram
         self.classifier = nn.Linear(config.hidden_size, self.num_labels)
-        self.init_weights()
+        self._init_weights(self.bert)
 
     def forward(
-        self,
-        input_ids,
-        token_type_ids=None,
-        attention_mask=None,
-        labels=None,
-        checkpoint_activations=False,
-        **kwargs,
+            self,
+            input_ids,
+            token_type_ids=None,
+            attention_mask=None,
+            input_Ngram_ids=None,
+            Ngram_attention_mask=None,
+            Ngram_token_type_ids=None,
+            Ngram_position_matrix=None,
+            labels=None,
+            checkpoint_activations=False,
+            **kwargs,
     ):
+        if not self.is_Ngram:
+            input_Ngram_ids = None
+            Ngram_attention_mask = None
+            Ngram_token_type_ids = None
+            Ngram_position_matrix = None
 
         outputs = self.bert(
-            input_ids,
-            token_type_ids,
-            attention_mask,
+            input_ids=input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
+            input_Ngram_ids=input_Ngram_ids,
+            Ngram_attention_mask=Ngram_attention_mask,
+            Ngram_token_type_ids=Ngram_token_type_ids,
+            Ngram_position_matrix=Ngram_position_matrix,
             output_all_encoded_layers=False,
             checkpoint_activations=checkpoint_activations,
         )
@@ -1173,3 +1288,4 @@ class BertForSequenceClassification(BertPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
+

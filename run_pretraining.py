@@ -74,7 +74,31 @@ except:
 global_step = 0
 global_data_samples = 0
 
+class TDNANgramDict(object):
+    """
+    Dict class to store the ngram
+    """
 
+    def __init__(self, ngram_freq_path, max_ngram_in_seq=20):
+        """Constructs TDNANgramDict
+        :param ngram_freq_path: ngrams with frequency
+        """
+        self.ngram_freq_path = ngram_freq_path
+        self.max_ngram_in_seq = max_ngram_in_seq
+        self.id_to_ngram_list = []
+        self.ngram_to_id_dict = {}
+
+        with open(ngram_freq_path, "r", encoding="utf-8") as fin:
+            for i, line in enumerate(fin):
+                ngram = line.strip()
+                self.id_to_ngram_list.append(ngram)
+                self.ngram_to_id_dict[ngram] = i
+
+    def save(self, ngram_freq_path):
+        with open(ngram_freq_path, "w", encoding="utf-8") as fout:
+            for ngram, freq in self.ngram_to_freq_dict.items():
+                fout.write("{},{}\n".format(ngram, freq))
+                
 def get_valid_dataloader(args, dataset: Dataset):
     if args.local_rank == -1:
         train_sampler = RandomSampler(dataset)
@@ -689,6 +713,9 @@ def main():
     args = parse_arguments()
     print("args:", args)
     args.exp_start_marker = get_now()
+    if args.is_Ngram:
+        Ngram_dict = TDNANgramDict(args.Ngram_path)
+        args.Ngram_size = len(Ngram_dict.ngram_to_id_dict)
     model, optimizer, lr_scheduler = prepare_model_and_optimizer(args)
 
     start_epoch = 0

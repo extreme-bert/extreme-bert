@@ -68,6 +68,10 @@ if __name__ == "__main__":
         help="Specify the maximum number of masked words per sequence",
         default=20,
     )
+    parser.add_argument("--Ngram_path",
+                        default=None,
+                        type=str,
+                        help="Path to Ngram path")
     parser.add_argument("--n_processes", type=int, default=8, help="number of parallel processes")
     parser.add_argument('--n_machine', type=int, default=1, help='Number of machines')
 
@@ -101,6 +105,8 @@ if __name__ == "__main__":
         hdf5_preprocessing_cmd += f" --max_predictions_per_seq={args.max_predictions_per_seq}"
         hdf5_preprocessing_cmd += f" --masked_lm_prob={args.masked_lm_prob}"
         hdf5_preprocessing_cmd += f" --random_seed={args.seed + shard_idx}"
+        if args.Ngram_path is not None:
+            hdf5_preprocessing_cmd += f" --Ngram_path={args.Ngram_path}"
         hdf5_preprocessing_cmd += " --dupe_factor=1"
         hdf5_preprocessing_cmd += " --no_nsp"
 

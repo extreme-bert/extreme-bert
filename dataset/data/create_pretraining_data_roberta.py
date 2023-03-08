@@ -1,7 +1,4 @@
 # coding=utf-8
-# Copyright 2022 Statistics and Machine Learning Research Group at HKUST. All rights reserved.
-# code taken from commit: ea000838156e3be251699ad6a3c8b1339c76e987
-# https://github.com/IntelLabs/academic-budget-bert
 # Copyright 2021 Intel Corporation. All rights reserved.
 # Copyright (c) 2019 NVIDIA CORPORATION. All rights reserved.
 # Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
@@ -17,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Create masked LM/next sentence masked_lm TF examples for BERT."""
+"""Create masked LM/next sentence masked_lm TF examples for Roberta."""
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import argparse
@@ -29,7 +26,7 @@ from io import open
 import h5py
 import numpy as np
 from tqdm import tqdm
-from transformers import AutoTokenizer
+from transformers import RobertaTokenizer
 
 from utils import convert_to_unicode
 
@@ -39,7 +36,7 @@ class TDNANgramDict(object):
     Dict class to store the ngram
     """
 
-    def __init__(self, ngram_freq_path, max_ngram_in_seq=20):
+    def __init__(self, ngram_freq_path, max_ngram_in_seq=30):
         """Constructs TDNANgramDict
         :param ngram_freq_path: ngrams with frequency
         """
@@ -107,7 +104,6 @@ def write_instance_to_example_file(
         [num_instances, max_predictions_per_seq], dtype="int32"
     )
     features["masked_lm_ids"] = np.zeros([num_instances, max_predictions_per_seq], dtype="int32")
-
     if not no_nsp:
         features["next_sentence_labels"] = np.zeros(num_instances, dtype="int32")
 
@@ -118,7 +114,7 @@ def write_instance_to_example_file(
         features['Ngram_token_type_ids'] = np.zeros([num_instances, max_ngram_per_seq], dtype="int32")
         features['Ngram_position_matrix'] = np.zeros([num_instances, max_seq_length, max_ngram_per_seq], dtype="int32")
 
-    for inst_index, instance in enumerate(instances):
+    for inst_index, instance in enumerate(tqdm(instances)):
         input_ids = tokenizer.convert_tokens_to_ids(instance.tokens)
         input_mask = [1] * len(input_ids)
         segment_ids = list(instance.segment_ids)
@@ -150,14 +146,14 @@ def write_instance_to_example_file(
         features["masked_lm_positions"][inst_index] = masked_lm_positions
         features["masked_lm_ids"][inst_index] = masked_lm_ids
 
+        if not no_nsp:
+            features["next_sentence_labels"][inst_index] = 1 if instance.is_random_next else 0
+
         if Ngram_flag:
             features['input_Ngram_ids'][inst_index] = instance.input_Ngram_ids
             features['Ngram_attention_mask'][inst_index] = instance.Ngram_attention_mask
             features['Ngram_token_type_ids'][inst_index] = instance.Ngram_token_type_ids
             features['Ngram_position_matrix'][inst_index] = instance.Ngram_position_matrix
-
-        if not no_nsp:
-            features["next_sentence_labels"][inst_index] = 1 if instance.is_random_next else 0
 
         total_written += 1
 
@@ -176,7 +172,7 @@ def write_instance_to_example_file(
         #     tf.logging.info(
         #         "%s: %s" % (feature_name, " ".join([str(x) for x in values])))
 
-    # print("saving data")
+    print("saving data")
     f = h5py.File(output_file, "w")
     f.create_dataset("input_ids", data=features["input_ids"], dtype="i4", compression="gzip")
     f.create_dataset("input_mask", data=features["input_mask"], dtype="i1", compression="gzip")
@@ -228,26 +224,10 @@ def create_training_instances(
     # sentence boundaries for the "next sentence prediction" task).
     # (2) Blank lines between documents. Document boundaries are needed so
     # that the "next sentence prediction" task doesn't span between documents.
-
-    # count = 0
-    # print(count)
-    # for input_file in input_files:
-    #     with open(input_file, "r") as reader:
-    #         while True:
-    #             count += 1
-
-    # for _ in range(dupe_factor):
-    #     for document_index in range(len(all_documents)):
-    #         count += 1
-    # print(count)
-    # pbar = tqdm(total=count,position=1)
-
     for input_file in input_files:
-        # print("creating instance from {}".format(input_file))
+        print("creating instance from {}".format(input_file))
         with open(input_file, "r", encoding='utf-8') as reader:
             while True:
-                # pbar.update(1)
-                # pbar.set_description("creating instance from {}".format(input_file))
                 line = convert_to_unicode(reader.readline())
                 if not line:
                     break
@@ -264,17 +244,15 @@ def create_training_instances(
     all_documents = [x for x in all_documents if x]
     rng.shuffle(all_documents)
 
-    vocab_words = list(tokenizer.vocab.keys())
+    vocab_words = list(tokenizer.get_vocab().keys())
     instances = []
     for _ in range(dupe_factor):
         for document_index in range(len(all_documents)):
-            # pbar.update(1)
-            # pbar.set_description("creating instance")
             if no_nsp:
                 instances.extend(
                     create_instances_from_document_no_nsp(
                         all_documents,
-                        Ngram_dict, 
+                        Ngram_dict,
                         Ngram_flag,
                         document_index,
                         max_seq_length,
@@ -287,19 +265,12 @@ def create_training_instances(
                     )
                 )
             else:
-                instances.extend(
-                    create_instances_from_document(
-                        all_documents,
-                        document_index,
-                        max_seq_length,
-                        short_seq_prob,
-                        masked_lm_prob,
-                        max_predictions_per_seq,
-                        vocab_words,
-                        rng,
-                        tokenizer
-                    )
-                )
+                print("Not supported")
+                exit()
+                # instances.extend(
+                #     create_instances_from_document(
+                #         all_documents, document_index, max_seq_length, short_seq_prob,
+                #         masked_lm_prob, max_predictions_per_seq, vocab_words, rng))
 
     rng.shuffle(instances)
     return instances
@@ -307,7 +278,7 @@ def create_training_instances(
 
 def create_instances_from_document_no_nsp(
         all_documents,
-        Ngram_dict, 
+        Ngram_dict,
         Ngram_flag,
         document_index,
         max_seq_length,
@@ -322,7 +293,7 @@ def create_instances_from_document_no_nsp(
     """Generate single sentences (NO 2nd segment for NSP task)"""
     document = all_documents[document_index]
 
-    # Account for [CLS], [SEP]
+    # Account for <s>, </s>
     max_num_tokens = max_seq_length - 2
 
     # We *usually* want to fill up the entire sequence since we are padding
@@ -349,32 +320,29 @@ def create_instances_from_document_no_nsp(
         segment = document[i]
         current_chunk.append(segment)
         current_length += len(segment)
-        if current_length >= target_seq_length:
+        if i == len(document) - 1 or current_length >= target_seq_length:
             if current_chunk:
                 tokens_a = []
                 for j in range(len(current_chunk)):
                     tokens_a.extend(current_chunk[j])
 
                 truncate_single_seq(tokens_a, max_num_tokens, rng)
-                
+
                 assert len(tokens_a) >= 1
 
                 tokens = []
                 segment_ids = []
-                # tokens.append("[CLS]")
-                tokens.append(tokenizer.cls_token)
+                tokens.append("<s>")
                 segment_ids.append(0)
                 for token in tokens_a:
                     tokens.append(token)
                     segment_ids.append(0)
 
-                # tokens.append("[SEP]")
-                tokens.append(tokenizer.sep_token)
+                tokens.append("</s>")
                 segment_ids.append(0)
-                
 
                 assert len(tokens) <= max_seq_length
-                
+
                 ngram_ids = None
                 ngram_mask_array = None
                 ngram_seg_ids = None
@@ -390,7 +358,7 @@ def create_instances_from_document_no_nsp(
                             if character_segment in Ngram_dict.ngram_to_id_dict:
                                 ngram_index = Ngram_dict.ngram_to_id_dict[character_segment]
                                 ngram_matches.append([ngram_index, q, p, character_segment])
-
+                    
                     max_word_in_seq_proportion = Ngram_dict.max_ngram_in_seq
                     if len(ngram_matches) > max_word_in_seq_proportion:
                         ngram_matches = ngram_matches[:max_word_in_seq_proportion]
@@ -402,7 +370,7 @@ def create_instances_from_document_no_nsp(
                     ngram_seg_ids = [0 if position < (len(tokens_a) + 2) else 1 for position in ngram_positions]
 
                     ngram_mask_array = np.zeros(Ngram_dict.max_ngram_in_seq)
-                    ngram_mask_array[:len(ngram_ids)] = 1 
+                    ngram_mask_array[:len(ngram_ids)] = 1
 
                     # record the masked positions
                     ngram_positions_matrix = np.zeros(shape=(max_seq_length, Ngram_dict.max_ngram_in_seq),
@@ -415,10 +383,9 @@ def create_instances_from_document_no_nsp(
                     ngram_ids += padding 
                     ngram_lengths += padding
                     ngram_seg_ids += padding
-                  
-              
+                    
                 (tokens, masked_lm_positions, masked_lm_labels) = create_masked_lm_predictions(
-                    tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng, tokenizer,
+                    tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng
                 )
                 instance = TrainingInstance(
                     tokens=tokens,
@@ -448,7 +415,6 @@ def create_instances_from_document(
         max_predictions_per_seq,
         vocab_words,
         rng,
-        tokenizer,
 ):
     """Creates `TrainingInstance`s for a single document."""
     document = all_documents[document_index]
@@ -534,25 +500,23 @@ def create_instances_from_document(
 
                 tokens = []
                 segment_ids = []
-                # tokens.append("[CLS]")
-                tokens.append(tokenizer.cls_token)
+                tokens.append("[CLS]")
                 segment_ids.append(0)
                 for token in tokens_a:
                     tokens.append(token)
                     segment_ids.append(0)
 
-                # tokens.append("[SEP]")
-                tokens.append(tokenizer.sep_token)
+                tokens.append("[SEP]")
                 segment_ids.append(0)
 
                 for token in tokens_b:
                     tokens.append(token)
                     segment_ids.append(1)
-                tokens.append(tokenizer.sep_token)
+                tokens.append("[SEP]")
                 segment_ids.append(1)
 
                 (tokens, masked_lm_positions, masked_lm_labels) = create_masked_lm_predictions(
-                    tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng, tokenizer
+                    tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng
                 )
                 instance = TrainingInstance(
                     tokens=tokens,
@@ -572,12 +536,12 @@ def create_instances_from_document(
 MaskedLmInstance = collections.namedtuple("MaskedLmInstance", ["index", "label"])
 
 
-def create_masked_lm_predictions(tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng, tokenizer):
+def create_masked_lm_predictions(tokens, masked_lm_prob, max_predictions_per_seq, vocab_words, rng):
     """Creates the predictions for the masked LM objective."""
 
     cand_indexes = []
     for (i, token) in enumerate(tokens):
-        if token == tokenizer.cls_token or token == tokenizer.sep_token:
+        if token == "<s>" or token == "</s>":
             continue
         cand_indexes.append(i)
 
@@ -597,20 +561,17 @@ def create_masked_lm_predictions(tokens, masked_lm_prob, max_predictions_per_seq
         covered_indexes.add(index)
 
         masked_token = None
-        # 80% of the time, replace with [MASK]
+        # 80% of the time, replace with <mask>
         if rng.random() < 0.8:
-            # masked_token = "[MASK]"
-            masked_token = tokenizer.mask_token
+            masked_token = "<mask>"
         else:
             # 10% of the time, keep original
             if rng.random() < 0.5:
                 masked_token = tokens[index]
             # 10% of the time, replace with random word
             else:
-                if "bert" in tokenizer.name_or_path:
-                    masked_token = vocab_words[rng.randint(0, len(vocab_words) - 1)]
-                elif "roberta" in tokenizer.name_or_path:
-                    masked_token = vocab_words[rng.randint(3, len(vocab_words) - 1)]
+                # choose an actual word instead of including tokenizer symbols
+                masked_token = vocab_words[rng.randint(3, len(vocab_words) - 2)]
 
         output_tokens[index] = masked_token
 
@@ -663,13 +624,15 @@ def truncate_single_seq(tokens, max_num_tokens, rng):
 def main():
     parser = argparse.ArgumentParser()
     ## Required parameters
+
     parser.add_argument(
         "--tokenizer_name",
-        default='bert-large-uncased',
+        default='roberta-base',
         type=str,
         required=True,
         help="The name of tokenizer",
     )
+
     parser.add_argument(
         "--input_file",
         default=None,
@@ -690,7 +653,7 @@ def main():
     # str
     parser.add_argument(
         "--bert_model",
-        default="bert-large-uncased",
+        default="roberta-base",
         type=str,
         required=False,
         help="Bert pre-trained model selected in the list: bert-base-uncased, "
@@ -742,23 +705,18 @@ def main():
         action="store_true",
         help="Generate samples without 2nd sentence segments (no NSP task)",
     )
-
     parser.add_argument("--Ngram_path",
                         default=None,
                         type=str,
                         help="Path to Ngram path")
-    
 
-    
     args = parser.parse_args()
     args.Ngram_flag = False
     Ngram_dict = None
     if args.Ngram_path is not None:
         args.Ngram_flag = True
         Ngram_dict = TDNANgramDict(args.Ngram_path)
-
-    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True, do_lower_case=args.do_lower_case,
-                                              max_len=1024)
+    tokenizer = RobertaTokenizer.from_pretrained(args.bert_model, max_len=args.max_seq_length)
 
     input_files = []
     if os.path.isfile(args.input_file):

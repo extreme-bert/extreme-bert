@@ -189,9 +189,24 @@ python merge_shards.py \
 
 Use `generate_samples.py` for generating samples compatible with dataloaders used in the training script.
 
+#### **Ngram**
+we also add the Ngram module to the extreme-bert, To extract n-grams for datasets, please run `pmi_ngram.py` with the following parameters:
+`--dataset`: the path of training data file
+`--output_dir`: the path of output directory,
+
+#### **fasttext**
+To use fasttext to initilize the embedding for the Ngram, please Training word vectors using fasttext on the raw data following https://fasttext.cc/docs/en/unsupervised-tutorial.html
+```bath 
+./fasttext skipgram -input data/fil9 -output result/fil9
+```
+Then use the `ngram_emb.py` to extract the ngram embeddings from pre-trained models. The fasttext initilization can be used when doing pretraining and fine-tuning.
+
+
 IMPORTANT NOTE: the duplication factor chosen will multiply the number of final shards by its factor. For example, 10 shards with duplication factor 5 will generate 50 shards (each shard with different randomly generated (masked) samples).
 
 See `python generate_samples.py -h` for the full list of options.
+
+if the Ngram_path is None, the processed samples would not include the Ngram component, if we provide the Ngram_path for the dataset, the processed samples would include the Ngram part.
 
 Example for generating shards with duplication factor 10, lowercasing the tokens, masked LM probability of 15%, max sequence length of 128, tokenizer by provided (Huggingface compatible) model named `bert-large-uncased`, max predictions per sample 20 and 16 parallel processes (for processing faster):
 
@@ -201,11 +216,37 @@ python generate_samples.py \
     -o <output_path> \
     --dup_factor 10 \
     --seed 42 \
-    --vocab_file <path_to_vocabulary_file> \
+    --tokenizer_name bert-large-uncased \
     --do_lower_case 1 \
     --masked_lm_prob 0.15 \ 
-    --max_seq_length 128 \
+    --max_seq_length  128 \
     --model_name bert-large-uncased \
     --max_predictions_per_seq 20 \
-    --n_processes 16
+    --n_processes 16 \
+    --Ngram_path <path_to_Ngram> 
+```
+
+Example for generating shards with duplication factor 10, masked LM probability of 15%, max sequence length of 128, tokenizer by provided (Huggingface compatible) model named `roberta-base`, max predictions per sample 20 and 16 parallel processes (for processing faster):
+
+```bash
+python generate_samples.py \
+    --dir <path_to_shards> \
+    -o <output_path> \
+    --dup_factor 10 \
+    --seed 42 \
+    --tokenizer_name roberta-base \
+    --masked_lm_prob 0.15 \ --max_seq_length 128 \
+    --model_name roberta-base \
+    --max_predictions_per_seq 20 \
+    --n_processes 16 \
+    --Ngram_path <path_to_Ngram> 
+```
+
+# Fine-tuning
+
+Following Gururangan et al. (2020), we conduct our experiments on eight classification tasks from four domains including biomedical sciences, computer scie nce, news and reviews. The datasets can be downloaded from the code associated with the [Don't Stop Pretraining ACL 2020 paper](https://github.com/allenai/dont-stop-pretraining). All task data is available on a public S3 url. Please check `glue_datasets.py`. After downloading, please convert them to *.tsv files referring to the script `convert_dont_stop_corpus.py`. Note that to create a low-resource setting, we constrain the size of all datasets into thousand-level. To do so, we randomly select a subset for RCT, AG, Amazon, IMDB with the ratio 1%, 1%, 1%, 10%, respectively. We provide imdb here for example.
+```bash
+curl -Lo train.jsonl https://allennlp.s3-us-west-2.amazonaws.com/dont_stop_pretraining/data/chemprot/train.jsonl
+curl -Lo dev.jsonl https://allennlp.s3-us-west-2.amazonaws.com/dont_stop_pretraining/data/chemprot/dev.jsonl
+curl -Lo test.jsonl https://allennlp.s3-us-west-2.amazonaws.com/dont_stop_pretraining/data/chemprot/test.jsonl
 ```
